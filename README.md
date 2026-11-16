@@ -9,7 +9,7 @@ npm ci
 npm run dev
 ```
 
-Open http://127.0.0.1:3000. Use the sidebar to explore each module. Navigation is reflected in URL hashes, so module links can be bookmarked and browser back/forward works.
+Open http://127.0.0.1:3000. Use the sidebar to explore each module. Navigation, record details, table searches, status filters, sorting, pagination and column preferences are reflected in URL hashes. Module and record views can be bookmarked; browser back/forward works.
 
 ```sh
 npm run typecheck
@@ -21,15 +21,15 @@ The production build produces a static site in `out/`. The build uses Webpack be
 
 ## Implemented modules
 
-- **Overview:** computed metrics, revenue comparison chart, recent orders, top products, attention signals and activity.
-- **AI Assistant:** supported questions use deterministic local calculations. Unsupported questions explain the demo limitation. Conversations persist locally.
+- **Overview:** computed metrics with explicit time scopes, historical revenue comparisons, recent orders, product links, attention signals, a work queue and local activity. Decorative sparklines and repeated assistant promotions have been removed.
+- **AI Assistant:** period-aware deterministic calculations from current local records, linked source records, multiline input, copy controls and locally archived conversations. Unsupported questions explain the demo limitation.
 - **Analytics:** seven/fourteen-day revenue comparisons, order totals, average order value, product and customer performance.
-- **Customers, Sales, Inventory, Finance:** searchable tables, status filters, record details and CSV exports.
-- **Alerts:** category filters, monitoring-rule reference and locally persisted reviewed state.
-- **Automations:** enable/pause sample workflows, manually simulate draft generation, review and record a demo approval.
-- **Reports:** previews and actual Excel `.xlsx`, PDF and CSV downloads containing source sample records. Export libraries load on demand.
-- **Settings:** workspace name, compact table density, digest preference preview and local demo reset.
-- **Global search:** find modules or records using the header or Cmd/Ctrl+K.
+- **Customers, Sales, Inventory, Finance:** validated local create/edit flows, stock adjustments and confirmed full-payment recording; searchable/sortable tables with pagination, column controls, selection, filtered/selected CSV export and saved views. Dedicated details include formatted values, customer-linked orders/invoices and a local activity trail.
+- **Alerts:** computed from local records, with category/status filters, contextual actions, reviewed history, undo, restore and persisted one-hour snoozing.
+- **Automations:** enable/pause sample workflows, generate drafts from current local records, edit drafts, approve or reject with a reason, and inspect timestamped review history. Finance drafts honor the more-than-seven-days overdue rule.
+- **Reports:** a report builder with date/status filters, selectable columns, saved configurations, matching table previews and real Excel `.xlsx`, PDF and CSV downloads. PDF exports include repeated headers and page numbers. Export libraries load on demand.
+- **Settings:** consistent workspace branding, activity time zone, compact table density, digest preference preview, connection status and local demo reset. The sidebar can collapse on desktop; the mobile drawer traps focus and restores it on dismissal.
+- **Global search:** find modules or records using the header or Cmd/Ctrl+K, with automatic search focus and arrow-key result navigation.
 
 ## Structure
 
@@ -50,24 +50,24 @@ src/
 
 ## Design system
 
-Light canvas, white cards, deep navy/charcoal ink, thin cool borders and restrained indigo accents. The spacing scale uses 4px steps. Cards have 8–10px corners; dialogs use 14px corners. Shared controls have visible focus states, and Radix dialogs provide focus trapping and keyboard dismissal. The sidebar becomes a mobile drawer, grids stack at tablet/mobile sizes, and tables scroll inside their cards.
+Light canvas, white cards, deep navy/charcoal ink, thin cool borders and restrained indigo accents. The spacing scale uses 4px steps. Cards have 8–10px corners; dialogs use 14px corners. Shared controls have visible focus states, and Radix dialogs provide focus trapping and keyboard dismissal. The sidebar becomes a focus-managed mobile drawer, grids stack at tablet/mobile sizes, and tables scroll inside their cards. Supporting text has a 12px floor; mobile form controls use 16px text. Charts include accessible data tables, and a skip link moves focus to the main content.
 
 ## Data and integration boundary
 
 **No backend APIs, database, authentication, live AI, payments, emails or external business integrations exist.** There are no credentials or environment variables to configure. Nothing is transmitted to an AI service.
 
-- `src/data/mock-data.ts` is the read-only data source. Future API adapters should replace this boundary, rather than introducing fetch calls throughout components.
+- `src/data/mock-data.ts` provides the original samples. `src/lib/business-context.tsx` owns validated, persisted local record edits and a capped activity history. Future API adapters should replace this boundary rather than introducing fetch calls throughout components.
 - `src/lib/demo-analytics.ts` computes business metrics from the mock arrays.
 - `src/lib/demo-assistant.ts` uses explicitly supported keyword matching and deterministic calculations. It is not a general-purpose AI implementation.
 - Workflow approval only changes local UI state. It never changes invoices, stock or orders and never sends messages.
-- Browser local storage contains preferences, dismissed alerts, simulated drafts and conversations. Reset is available under Settings → Demo data.
-- Source data represents **November 14, 2026**, in USD. Daily sales are aggregate data for November 1–14; recent orders are a smaller example list. Product/customer revenue are separate lifetime samples. These intentionally different data scopes are labeled in the UI.
+- Browser local storage contains edited records, activity, preferences, reviewed/snoozed alerts, saved table/report views, simulated drafts and conversations. Reset under Settings → Demo data clears all local changes and restores the original samples. Storage failures are surfaced in the UI.
+- Source data represents **November 14, 2026**, in USD. Daily sales are aggregate data for November 1–14; recent orders are a smaller example list. Product/customer revenue are separate lifetime samples. These intentionally different data scopes are labeled in the UI. Local order edits do not rewrite historical daily sales or lifetime sample totals. Customer renames update linked local order and invoice references. Invoices are linked by customer; no order-to-invoice relationship is fabricated.
 - A digest toggle saves a preference only. No notification scheduling is implemented.
 
 ## Verification
 
-The tests verify independently summed metrics, period filtering, customer references, assistant responses, real workbook/PDF creation, inventory search, approval state, navigation, local persistence and global search.
+The 26 automated tests cover metric totals and scopes, customer references, persistence validation, currency precision, assistant periods/conversations, workbook/PDF creation, table sorting/pagination/saved views, record creation/rename, payments and reload persistence, alerts, contextual navigation, editable/rejected drafts and report filters.
 
-Browser visual QA was unavailable in the execution environment. Responsive layouts are implemented in CSS, but their rendered appearance still needs a real desktop/tablet/mobile browser review.
+Browser QA checks all 11 modules at 1440, 1024, 768, 390 and 320px widths. Desktop and mobile screenshots were inspected. Keyboard checks cover mobile drawer focus trapping, Escape/focus restoration, record details, command search and persisted sidebar collapse. Browser QA uses an isolated headless Chrome profile; no user browser data is accessed.
 
 The ExcelJS UUID dependency is overridden to a compatible patched v11 version. ExcelJS only uses its v4 export; the workbook round-trip test verifies report compatibility.

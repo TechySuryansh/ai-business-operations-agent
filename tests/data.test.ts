@@ -56,3 +56,43 @@ test('PDF export produces an actual PDF document', async () => {
   assert.match(await blob.slice(0, 20).text(), /^%PDF-/);
   assert.ok(blob.size > 2000);
 });
+
+test('local ledger metrics reflect payments and stock changes without rewriting historical revenue', () => {
+  const data = {
+    customers,
+    products: products.map((p) => ({ ...p, stock: p.reorder })),
+    invoices: invoices.map((i) => ({ ...i, status: 'Paid' as const })),
+  };
+  const m = getMetrics(7, data);
+  assert.equal(m.revenue, 79900);
+  assert.equal(m.outstanding, 0);
+  assert.equal(m.overdue, 0);
+  assert.equal(m.lowStock, 0);
+});
+
+test('currency retains cents and abbreviates compact amounts', async () => {
+  const { money } = await import('../src/lib/utils');
+  assert.equal(money(123.45), '$123.45');
+  assert.equal(money(123), '$123');
+  assert.equal(money(1200, true), '$1.2K');
+});
+
+test('persisted business data rejects invalid quantities, statuses and customer references', async () => {
+  const { validData, initialData } = await import('../src/lib/business-context');
+  assert.ok(validData(initialData));
+  assert.equal(
+    validData({ ...initialData, products: products.map((p) => ({ ...p, stock: -1 })) }),
+    false,
+  );
+  assert.equal(
+    validData({
+      ...initialData,
+      orders: orders.map((o) => ({ ...o, customer: 'Missing customer' })),
+    }),
+    false,
+  );
+  assert.equal(
+    validData({ ...initialData, invoices: invoices.map((i) => ({ ...i, status: 'Unknown' })) }),
+    false,
+  );
+});

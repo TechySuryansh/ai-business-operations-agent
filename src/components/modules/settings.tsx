@@ -3,11 +3,14 @@ import { useState } from 'react';
 import { Building2, Check, Database, Monitor, Save, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
+import { initials } from '@/lib/business-context';
 import { Badge, SectionHeading } from '@/components/ui/shared';
 export interface Preferences {
   companyName: string;
   emailDigest: boolean;
   compactTables: boolean;
+  sidebarCollapsed?: boolean;
+  timeZone?: string;
 }
 export function Settings({
   preferences,
@@ -23,13 +26,20 @@ export function Settings({
   const [form, setForm] = useState(preferences);
   const [confirm, setConfirm] = useState(false);
   const [tab, setTab] = useState('Workspace');
+  const dirty =
+    form.companyName !== preferences.companyName || form.timeZone !== preferences.timeZone;
   return (
     <div className="settings-layout">
       <div className="settings-tabs">
-        {['Workspace', 'Preferences', 'Demo data'].map((t, i) => {
-          const Icon = [Building2, Monitor, Database][i];
+        {['Workspace', 'Preferences', 'Connections', 'Demo data'].map((t, i) => {
+          const Icon = [Building2, Monitor, ShieldCheck, Database][i];
           return (
-            <button key={t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
+            <button
+              key={t}
+              aria-pressed={tab === t}
+              className={tab === t ? 'active' : ''}
+              onClick={() => setTab(t)}
+            >
               <Icon size={16} />
               {t}
             </button>
@@ -42,6 +52,10 @@ export function Settings({
             className="panel settings-panel"
             onSubmit={(e) => {
               e.preventDefault();
+              if (form.companyName.trim().length < 2) {
+                notify('Invalid workspace name. Enter at least two characters.');
+                return;
+              }
               onSave({ ...form, companyName: form.companyName.trim() });
               notify('Workspace preferences saved in this browser.');
             }}
@@ -51,7 +65,7 @@ export function Settings({
               description="Personalize how your demo workspace appears."
             />
             <div className="workspace-identity">
-              <div className="company-avatar">TN</div>
+              <div className="company-avatar">{initials(form.companyName)}</div>
               <div>
                 <strong>{form.companyName}</strong>
                 <span>
@@ -81,6 +95,21 @@ export function Settings({
                 <small>All sample amounts are denominated in USD.</small>
               </label>
             </div>
+            <label className="field-label">
+              Activity time zone
+              <select
+                value={form.timeZone ?? 'UTC'}
+                onChange={(e) => setForm({ ...form, timeZone: e.target.value })}
+              >
+                {['UTC', 'Asia/Kolkata', 'America/New_York', 'Europe/London'].map((zone) => (
+                  <option key={zone}>{zone}</option>
+                ))}
+              </select>
+              <small>
+                Used for local activity and draft review timestamps. Historical business dates stay
+                unchanged.
+              </small>
+            </label>
             <div className="settings-info">
               <ShieldCheck size={17} />
               <p>
@@ -90,8 +119,8 @@ export function Settings({
               </p>
             </div>
             <div className="settings-footer">
-              <span>Stored locally on this device.</span>
-              <Button type="submit">
+              <span>{dirty ? 'Unsaved changes' : 'All changes saved on this device'}</span>
+              <Button type="submit" disabled={!dirty}>
                 <Save size={15} />
                 Save changes
               </Button>
@@ -151,6 +180,28 @@ export function Settings({
               <Badge tone="neutral">Light mode</Badge>
             </div>
           </section>
+        ) : tab === 'Connections' ? (
+          <section className="panel settings-panel">
+            <SectionHeading
+              title="Connections & access"
+              description="This workspace runs locally with fictional business data."
+            />
+            {[
+              ['Business records', 'Saved in this browser'],
+              ['AI provider', 'Predefined demo logic'],
+              ['Email & scheduled jobs', 'Not connected'],
+              ['Authentication & team roles', 'Not connected'],
+            ].map(([label, status]) => (
+              <div className="connection-status" key={label}>
+                <strong>{label}</strong>
+                <Badge tone="neutral">{status}</Badge>
+              </div>
+            ))}
+            <p className="data-scope">
+              The sample admin identity is for demonstration. Team invitations and enforced
+              permissions require an authentication service.
+            </p>
+          </section>
         ) : (
           <section className="panel settings-panel">
             <SectionHeading
@@ -172,7 +223,7 @@ export function Settings({
             </div>
             <div className="callout">
               Reset restores reviewed alerts, workflow states, conversation history and workspace
-              preferences. Source records are never modified.
+              preferences. Local record edits and saved report/table views are also cleared.
             </div>
             <Button variant="outline" className="danger-button" onClick={() => setConfirm(true)}>
               Reset local demo
@@ -184,7 +235,7 @@ export function Settings({
         open={confirm}
         onOpenChange={setConfirm}
         title="Reset this demo?"
-        description="Your local conversation, drafts, reviewed alerts and preferences will be cleared. The original fictional records will remain."
+        description="Your local record edits, saved views, conversations, drafts, alert history and preferences will be cleared. The original fictional records will remain."
       >
         <div className="dialog-actions">
           <Button variant="outline" onClick={() => setConfirm(false)}>
@@ -198,6 +249,7 @@ export function Settings({
                 companyName: 'TechNova Distributors',
                 emailDigest: false,
                 compactTables: false,
+                timeZone: 'UTC',
               });
               notify('The local demo has been reset.');
             }}

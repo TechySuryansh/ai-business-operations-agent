@@ -7,7 +7,8 @@ export const money = (value: number, compact = false) =>
   new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
-    maximumFractionDigits: 0,
+    minimumFractionDigits: compact ? 0 : Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: compact ? 1 : 2,
     notation: compact ? 'compact' : 'standard',
   }).format(value);
 export const number = (value: number) => new Intl.NumberFormat('en-US').format(value);
@@ -33,5 +34,5 @@ export function downloadCSV(name: string, rows: object[]) {
   link.href = url;
   link.download = `${name}.csv`;
   link.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

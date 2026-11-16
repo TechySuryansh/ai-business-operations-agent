@@ -43,3 +43,8 @@ Object.defineProperty(globalThis, 'cancelAnimationFrame', {
 });
 dom.window.scrollTo = () => {};
 dom.window.HTMLElement.prototype.scrollIntoView = () => {};
+
+Object.defineProperty(dom.window, 'matchMedia', {
+  writable: true,
+  value: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+});

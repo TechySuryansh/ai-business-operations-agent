@@ -1,5 +1,5 @@
 import { ArrowUpRight, Search, FileSearch } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { ReactNode, KeyboardEventHandler } from 'react';
 import { cn } from '@/lib/utils';
 export function Badge({
   children,
@@ -29,15 +29,21 @@ export function SearchInput({
   value,
   onChange,
   placeholder = 'Search...',
+  onKeyDown,
+  focusOnOpen = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  onKeyDown?: KeyboardEventHandler<HTMLInputElement>;
+  focusOnOpen?: boolean;
 }) {
   return (
     <div className="search-input">
       <Search size={16} />
       <input
+        data-autofocus={focusOnOpen ? 'true' : undefined}
+        onKeyDown={onKeyDown}
         aria-label={placeholder}
         placeholder={placeholder}
         value={value}

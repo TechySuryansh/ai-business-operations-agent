@@ -1,13 +1,16 @@
 'use client';
+import { useBusiness, exportName } from '@/lib/business-context';
 import { ArrowUpRight, CircleDollarSign, Download, ShoppingBag, TrendingUp } from 'lucide-react';
 import { ProductChart, RevenueChart } from '@/components/dashboard/charts';
 import { Button } from '@/components/ui/button';
 import { SectionHeading } from '@/components/ui/shared';
-import { customers, dailySales } from '@/data/mock-data';
+import { dailySales } from '@/data/mock-data';
 import { getMetrics } from '@/lib/demo-analytics';
 import { downloadCSV, money, number } from '@/lib/utils';
 export function Analytics({ days, notify }: { days: number; notify: (s: string) => void }) {
-  const m = getMetrics(days);
+  const { data, companyName } = useBusiness();
+  const { customers } = data;
+  const m = getMetrics(days, data);
   return (
     <div className="module-stack">
       <div className="summary-grid">
@@ -48,7 +51,7 @@ export function Analytics({ days, notify }: { days: number; notify: (s: string) 
               variant="outline"
               size="sm"
               onClick={() => {
-                downloadCSV('technova-daily-sales', dailySales.slice(-days));
+                downloadCSV(`${exportName(companyName)}-daily-sales`, dailySales.slice(-days));
                 notify('Daily sales exported as CSV.');
               }}
             >
@@ -96,7 +99,11 @@ export function Analytics({ days, notify }: { days: number; notify: (s: string) 
                     <strong>{money(c.revenue)}</strong>
                   </div>
                   <div className="bar-track">
-                    <span style={{ width: `${(c.revenue / customers[0].revenue) * 100}%` }} />
+                    <span
+                      style={{
+                        width: `${(c.revenue / Math.max(1, ...customers.map((account) => account.revenue))) * 100}%`,
+                      }}
+                    />
                   </div>
                 </div>
               ))}

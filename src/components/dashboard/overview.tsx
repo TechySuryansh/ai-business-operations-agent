@@ -1,4 +1,5 @@
 'use client';
+import { useBusiness } from '@/lib/business-context';
 import {
   ArrowDown,
   ArrowRight,
@@ -14,10 +15,10 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
-import { RevenueChart, Sparkline } from './charts';
+import { RevenueChart } from './charts';
 import { SectionHeading, TextLink, StatusBadge } from '@/components/ui/shared';
 import { Button } from '@/components/ui/button';
-import { activities, orders, products } from '@/data/mock-data';
+import { activities } from '@/data/mock-data';
 import { getMetrics } from '@/lib/demo-analytics';
 import { money, number } from '@/lib/utils';
 import type { BusinessAlert, Module } from '@/types/business';
@@ -27,40 +28,44 @@ export function Overview({
   days,
   alerts,
   onOrder,
+  pendingDrafts,
 }: {
-  navigate: (module: Module) => void;
+  navigate: (module: Module, query?: string) => void;
   ask: (prompt: string) => void;
   days: number;
   alerts: BusinessAlert[];
   onOrder: (id: string) => void;
+  pendingDrafts: number;
 }) {
-  const metrics = getMetrics(days);
+  const { data, audit, formatTime } = useBusiness();
+  const { orders, products } = data;
+  const metrics = getMetrics(days, data);
   const stats = [
     {
-      label: 'Total revenue',
+      label: 'Period revenue',
       value: money(metrics.revenue),
       change: `${metrics.growth}%`,
       detail: 'vs. previous period',
       icon: CircleDollarSign,
     },
     {
-      label: 'Total orders',
+      label: 'Period orders',
       value: number(metrics.orders),
       change: `${days} days`,
-      detail: 'reporting period',
+      detail: 'historical daily aggregates',
       icon: ShoppingBag,
     },
     {
       label: 'Outstanding payments',
       value: money(metrics.outstanding),
-      change: '3 overdue',
+      change: `${metrics.overdue} overdue`,
       detail: 'invoices need attention',
       icon: CreditCard,
     },
     {
       label: 'Active customers',
       value: number(metrics.activeCustomers),
-      change: '2 inactive',
+      change: `${metrics.inactiveCustomers} inactive`,
       detail: 'ready for a follow-up',
       icon: Users,
     },
@@ -68,6 +73,10 @@ export function Overview({
   const top = [...products].sort((a, b) => b.revenue - a.revenue).slice(0, 4);
   return (
     <div className="overview-grid">
+      <p className="data-scope">
+        Revenue and order trends: Nov {15 - days}–14, 2026. Balances, customers and stock: current
+        local records. Product rankings: lifetime sample totals.
+      </p>
       <div className="insight-banner">
         <div className="insight-mark">
           <Sparkles size={20} />
@@ -75,15 +84,15 @@ export function Overview({
         <div>
           <div className="eyebrow">
             YOUR BUSINESS, AT A GLANCE <span className="live-dot" />{' '}
-            <span className="ai-caption">AI brief</span>
+            <span className="ai-caption">Calculated summary · demo snapshot</span>
           </div>
           <p>
             Revenue is up <strong>{metrics.growth}%</strong>. A strong period, with a few things to
             keep an eye on.
           </p>
           <span>
-            {metrics.lowStock} products need restocking and 3 invoices are overdue. Let’s stay ahead
-            of them.
+            {metrics.lowStock} products need restocking and {metrics.overdue} invoices are overdue.
+            Let’s stay ahead of them.
           </span>
         </div>
         <button onClick={() => ask('How is my business doing?')}>
@@ -105,7 +114,6 @@ export function Overview({
             </div>
             <div className="metric-main">
               <strong>{stat.value}</strong>
-              <Sparkline variant={i} />
             </div>
             <div className="metric-foot">
               <span
@@ -122,18 +130,7 @@ export function Overview({
       <section className="panel revenue-panel">
         <SectionHeading
           title="Revenue overview"
-          description="A closer look at how your business is growing."
-          action={
-            <select
-              className="subtle-select"
-              aria-label="Revenue chart metric"
-              onChange={(e) => e.target.value === 'orders' && navigate('Analytics')}
-              defaultValue="revenue"
-            >
-              <option value="revenue">Revenue</option>
-              <option value="orders">Orders analytics</option>
-            </select>
-          }
+          description={`Nov ${15 - days}–14, 2026 · Historical daily sales aggregates`}
         />
         <div className="chart-summary">
           <strong>{money(metrics.revenue)}</strong>
@@ -260,11 +257,15 @@ export function Overview({
       <section className="panel products-panel">
         <SectionHeading
           title="Top products"
-          action={<TextLink onClick={() => navigate('Inventory')}>View all</TextLink>}
+          action={<TextLink onClick={() => navigate('Inventory', '')}>View all</TextLink>}
         />
         <div className="top-products">
           {top.map((p, i) => (
-            <button key={p.id} className="top-product" onClick={() => navigate('Inventory')}>
+            <button
+              key={p.id}
+              className="top-product"
+              onClick={() => navigate('Inventory', `id=${encodeURIComponent(p.id)}`)}
+            >
               <span className="product-rank">0{i + 1}</span>
               <div>
                 <strong>{p.name}</strong>
@@ -278,7 +279,7 @@ export function Overview({
       <section className="panel activity-panel">
         <SectionHeading
           title="Recent activity"
-          action={<span className="muted tiny">Today, Nov 14</span>}
+          action={<span className="muted tiny">Snapshot · Nov 14, 2026</span>}
         />
         <div className="activity-list">
           {activities.map((a) => (
@@ -294,6 +295,13 @@ export function Overview({
                       : a.kind === 'inventory'
                         ? 'Inventory'
                         : 'Reports',
+                  a.kind === 'order'
+                    ? 'id=ORD-2048'
+                    : a.kind === 'payment'
+                      ? 'id=INV-1088'
+                      : a.kind === 'inventory'
+                        ? 'status=Low+stock'
+                        : undefined,
                 )
               }
             >
@@ -314,33 +322,50 @@ export function Overview({
               </div>
               <div className="activity-value">
                 <strong>{a.value}</strong>
-                <span>{a.time}</span>
+                <span>Snapshot activity</span>
               </div>
             </button>
           ))}
         </div>
       </section>
-      <section className="assistant-promo">
-        <div className="promo-orbit">
-          <Sparkles size={25} />
-          <span />
-          <span />
+      <section className="panel work-queue">
+        <SectionHeading
+          title="Your work queue"
+          description="Current local records · historical charts stay unchanged"
+        />
+        <div className="task-list">
+          <button onClick={() => navigate('Finance', 'status=Overdue')}>
+            <CreditCard size={18} />
+            <span>
+              <strong>{metrics.overdue} overdue invoices</strong>
+              <small>Review balances and record payments</small>
+            </span>
+            <ArrowRight size={16} />
+          </button>
+          <button onClick={() => navigate('Inventory', 'status=Low+stock')}>
+            <Package size={18} />
+            <span>
+              <strong>{metrics.lowStock} products below reorder level</strong>
+              <small>Adjust stock or prepare purchase drafts</small>
+            </span>
+            <ArrowRight size={16} />
+          </button>
+          <button onClick={() => navigate('Automations')}>
+            <Zap size={18} />
+            <span>
+              <strong>{pendingDrafts} drafts awaiting review</strong>
+              <small>Review prepared business actions</small>
+            </span>
+            <ArrowRight size={16} />
+          </button>
         </div>
-        <span className="eyebrow">YOUR NEXT MOVE, MADE SIMPLE</span>
-        <h2>
-          Good questions.
-          <br />
-          Better business decisions.
-        </h2>
-        <p>
-          Ask about your numbers, find opportunities,
-          <br />
-          and turn insights into your next action.
-        </p>
-        <Button onClick={() => navigate('AI Assistant')}>
-          Ask your assistant <ArrowUpRight size={15} />
-        </Button>
-        <span className="promo-note">Built around your business.</span>
+        {audit.length > 0 && (
+          <div className="local-audit">
+            <h3>Latest local change</h3>
+            <p>{audit[0].message}</p>
+            <time dateTime={audit[0].at}>{formatTime(audit[0].at)}</time>
+          </div>
+        )}
       </section>
     </div>
   );

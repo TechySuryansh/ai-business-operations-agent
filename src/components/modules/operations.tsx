@@ -19,23 +19,40 @@ import {
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Badge, Empty, SectionHeading } from '@/components/ui/shared';
-import { invoices, products } from '@/data/mock-data';
+import { useBusiness } from '@/lib/business-context';
 import { money } from '@/lib/utils';
 import type { Automation, BusinessAlert, Module } from '@/types/business';
 export function Alerts({
   alerts,
+  reviewed = [],
+  snoozed = {},
+  restore = () => {},
+  snooze = () => {},
   dismiss,
   navigate,
   notify,
 }: {
   alerts: BusinessAlert[];
+  reviewed?: string[];
+  snoozed?: Record<string, number>;
+  restore?: (id: string) => void;
+  snooze?: (id: string) => void;
   dismiss: (id: string) => void;
-  navigate: (m: Module) => void;
+  navigate: (m: Module, query?: string) => void;
   notify: (s: string) => void;
 }) {
   const [filter, setFilter] = useState('All alerts');
+  const [history, setHistory] = useState(false);
+  const [lastReviewed, setLastReviewed] = useState('');
+  const active = alerts.filter((a) => !reviewed.includes(a.id) && !(snoozed[a.id] > Date.now()));
   const [ruleOpen, setRuleOpen] = useState(false);
-  const visible = alerts.filter((a) => filter === 'All alerts' || a.category === filter);
+  const visible = alerts.filter(
+    (a) =>
+      (history
+        ? reviewed.includes(a.id) || snoozed[a.id] > Date.now()
+        : !reviewed.includes(a.id) && !(snoozed[a.id] > Date.now())) &&
+      (filter === 'All alerts' || a.category === filter),
+  );
   return (
     <div className="module-stack">
       <div className="alert-summary">
@@ -45,8 +62,8 @@ export function Alerts({
         <div>
           <h2>Stay one step ahead.</h2>
           <p>
-            {alerts.length
-              ? `${alerts.length} business signals are ready for your review.`
+            {active.length
+              ? `${active.length} business signals are ready for your review.`
               : 'All business signals have been reviewed.'}{' '}
             Your rules keep the important things in view.
           </p>
@@ -55,13 +72,47 @@ export function Alerts({
           View monitoring rules
         </Button>
       </div>
-      <div className="filter-tabs standalone">
+      <div className="filter-tabs standalone" role="group" aria-label="Alert filters">
+        <button
+          aria-pressed={!history}
+          className={!history ? 'active' : ''}
+          onClick={() => setHistory(false)}
+        >
+          Active ({active.length})
+        </button>
+        <button
+          aria-pressed={history}
+          className={history ? 'active' : ''}
+          onClick={() => setHistory(true)}
+        >
+          Reviewed & snoozed
+        </button>
         {['All alerts', 'Inventory', 'Finance', 'Sales'].map((f) => (
-          <button key={f} className={filter === f ? 'active' : ''} onClick={() => setFilter(f)}>
+          <button
+            key={f}
+            aria-pressed={filter === f}
+            className={filter === f ? 'active' : ''}
+            onClick={() => setFilter(f)}
+          >
             {f}
           </button>
         ))}
       </div>
+      {lastReviewed && (
+        <div className="alert-undo" role="status">
+          <span>Alert marked as reviewed.</span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              restore(lastReviewed);
+              setLastReviewed('');
+            }}
+          >
+            Undo review
+          </Button>
+        </div>
+      )}
       <div className="alert-cards">
         {visible.map((a) => (
           <section className="panel alert-card" key={a.id}>
@@ -85,7 +136,13 @@ export function Alerts({
                 </Badge>
                 <span>{a.category}</span>
                 <span>·</span>
-                <span>{a.time}</span>
+                <span>
+                  {reviewed.includes(a.id)
+                    ? 'Reviewed'
+                    : snoozed[a.id] > Date.now()
+                      ? 'Snoozed for one hour'
+                      : 'Nov 14, 2026 snapshot'}
+                </span>
               </div>
               <h3>{a.title}</h3>
               <p>{a.description}</p>
@@ -100,22 +157,36 @@ export function Alerts({
                         : a.category === 'Finance'
                           ? 'Finance'
                           : 'Customers',
+                      `status=${encodeURIComponent(a.category === 'Inventory' ? 'Low stock' : a.category === 'Finance' ? 'Overdue' : 'Inactive')}`,
                     )
                   }
                 >
                   {a.action}
                   <ArrowRight size={14} />
                 </Button>
-                <button
-                  className="quiet-action"
-                  onClick={() => {
-                    dismiss(a.id);
-                    notify('Alert marked as reviewed in this browser.');
-                  }}
-                >
-                  <Check size={14} />
-                  Mark reviewed
-                </button>
+                {!history && (
+                  <button className="quiet-action" onClick={() => snooze(a.id)}>
+                    <Clock3 size={14} />
+                    Snooze 1 hour
+                  </button>
+                )}
+                {history ? (
+                  <button className="quiet-action" onClick={() => restore(a.id)}>
+                    Restore alert
+                  </button>
+                ) : (
+                  <button
+                    className="quiet-action"
+                    onClick={() => {
+                      dismiss(a.id);
+                      setLastReviewed(a.id);
+                      notify('Alert marked as reviewed in this browser.');
+                    }}
+                  >
+                    <Check size={14} />
+                    Mark reviewed
+                  </button>
+                )}
               </div>
             </div>
           </section>
@@ -124,8 +195,12 @@ export function Alerts({
       {visible.length === 0 && (
         <div className="panel">
           <Empty
-            title="Nothing needs attention here"
-            description="You’re up to date on this category."
+            title={history ? 'No reviewed or snoozed alerts' : 'Nothing needs attention here'}
+            description={
+              history
+                ? 'Reviewed alerts will appear here and can be restored.'
+                : 'You’re up to date on this category.'
+            }
           />
         </div>
       )}
@@ -174,7 +249,10 @@ export interface Draft {
   automationId: string;
   title: string;
   body: string;
-  status: 'Needs review' | 'Approved in demo';
+  status: 'Needs review' | 'Approved in demo' | 'Rejected';
+  updated?: string;
+  history?: { at: string; action: string }[];
+  reason?: string;
   created: string;
 }
 export function Automations({
@@ -190,12 +268,24 @@ export function Automations({
   setDrafts: (drafts: Draft[]) => void;
   notify: (s: string) => void;
 }) {
+  const {
+    data: { products, invoices, customers },
+    companyName,
+    formatTime,
+  } = useBusiness();
+  const [editing, setEditing] = useState(false);
+  const [body, setBody] = useState('');
+  const [reason, setReason] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<'workflows' | 'drafts'>('workflows');
   const draft = drafts.find((d) => d.id === selected);
   const run = (item: Automation) => {
     let body = '';
     if (item.category === 'Inventory') {
+      if (!products.some((p) => p.stock < p.reorder)) {
+        notify('No products are below reorder level.');
+        return;
+      }
       body = `PURCHASE ORDER DRAFT\n\n${products
         .filter((p) => p.stock < p.reorder)
         .map(
@@ -206,18 +296,34 @@ export function Automations({
           '\n\n',
         )}\n\nConfirm wholesale pricing, quantities and delivery terms with each supplier before placing an order.`;
     } else if (item.category === 'Finance') {
-      const i = invoices.find((i) => i.status === 'Overdue')!;
+      const i = invoices
+        .filter(
+          (i) =>
+            i.status === 'Overdue' && (Date.parse('2026-11-14') - Date.parse(i.due)) / 86400000 > 7,
+        )
+        .sort((a, b) => a.due.localeCompare(b.due))[0];
+      if (!i) {
+        notify('No invoices meet this workflow’s threshold of more than 7 days overdue.');
+        return;
+      }
       body = `To: Accounts payable, ${i.customer}\nSubject: A quick reminder about ${i.id}\n\nHello,\n\nI hope you’re well. Our records show an outstanding balance of ${money(i.amount)} for invoice ${i.id}, due on ${i.due}.\n\nCould you let us know when we can expect payment? If payment is already on its way, please disregard this reminder.\n\nThank you,\nTechNova Distributors\n\nThis is a sample draft. No recipient address or email service is connected.`;
-    } else
-      body =
-        'To: Metro Digital\nSubject: Let’s catch up\n\nHi Olivia,\n\nIt’s been a little while since your last order, and we wanted to check in. We’d be happy to help with your upcoming electronics needs.\n\nWould you like to review our current range of monitors and accessories?\n\nBest,\nThe TechNova team\n\nThis is a sample draft. Nothing will be sent.';
+    } else {
+      const customer = customers.find((c) => c.status === 'Inactive');
+      if (!customer) {
+        notify('No inactive customers meet this workflow’s criteria.');
+        return;
+      }
+      body = `To: ${customer.contact}, ${customer.name}\nSubject: Let’s catch up\n\nHello ${customer.contact},\n\nWe wanted to check in on your upcoming business needs. Would you like to review our current catalog?\n\nBest,\n${companyName}\n\nLocal demo draft. Nothing will be sent.`;
+    }
+    body = body.replaceAll('TechNova Distributors', companyName);
     const created: Draft = {
       id: crypto.randomUUID(),
       automationId: item.id,
       title: item.title,
       body,
       status: 'Needs review',
-      created: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      created: new Date().toISOString(),
+      history: [{ at: new Date().toISOString(), action: 'Draft created locally' }],
     };
     setDrafts([created, ...drafts]);
     setItems(
@@ -226,6 +332,8 @@ export function Automations({
       ),
     );
     setSelected(created.id);
+    setEditing(false);
+    setReason('');
     notify('Demo draft created. Review it before approving.');
   };
   return (
@@ -235,20 +343,25 @@ export function Automations({
         <div>
           <strong>You stay in control.</strong>
           <p>
-            Workflows prepare drafts for review. This frontend never sends messages, places orders
-            or changes business records.
+            Workflows prepare drafts for review. These simulations never send messages, place orders
+            or change the local ledger.
           </p>
         </div>
       </div>
       <div className="module-toolbar">
         <div className="filter-tabs">
           <button
+            aria-pressed={tab === 'workflows'}
             className={tab === 'workflows' ? 'active' : ''}
             onClick={() => setTab('workflows')}
           >
             Workflows <span>{items.length}</span>
           </button>
-          <button className={tab === 'drafts' ? 'active' : ''} onClick={() => setTab('drafts')}>
+          <button
+            aria-pressed={tab === 'drafts'}
+            className={tab === 'drafts' ? 'active' : ''}
+            onClick={() => setTab('drafts')}
+          >
             Drafts & approvals <span>{drafts.length}</span>
           </button>
         </div>
@@ -314,13 +427,24 @@ export function Automations({
           />
           {drafts.length ? (
             drafts.map((d) => (
-              <button className="draft-row" key={d.id} onClick={() => setSelected(d.id)}>
+              <button
+                className="draft-row"
+                key={d.id}
+                onClick={() => {
+                  setSelected(d.id);
+                  setEditing(false);
+                  setReason('');
+                }}
+              >
                 <span className="automation-icon">
                   <FileText size={18} />
                 </span>
                 <div>
                   <strong>{d.title}</strong>
-                  <span>Created at {d.created}</span>
+                  <span>
+                    Created{' '}
+                    {Number.isNaN(Date.parse(d.created)) ? d.created : formatTime(d.created)}
+                  </span>
                 </div>
                 <Badge tone={d.status === 'Needs review' ? 'amber' : 'green'}>{d.status}</Badge>
                 <ArrowRight size={16} />
@@ -345,7 +469,34 @@ export function Automations({
         {draft && (
           <>
             <Badge tone={draft.status === 'Needs review' ? 'amber' : 'green'}>{draft.status}</Badge>
-            <pre className="draft-body">{draft.body}</pre>
+            {editing ? (
+              <label className="field-label">
+                Draft content
+                <textarea rows={12} value={body} onChange={(e) => setBody(e.target.value)} />
+              </label>
+            ) : (
+              <pre className="draft-body">{draft.body}</pre>
+            )}
+            <div className="local-audit">
+              <h3>Review history</h3>
+              {draft.history?.map((entry, i) => (
+                <p key={i}>
+                  <time dateTime={entry.at}>{formatTime(entry.at)}</time> · {entry.action}
+                </p>
+              ))}
+              {draft.reason && <p>Rejection reason: {draft.reason}</p>}
+            </div>
+            {draft.status === 'Needs review' && (
+              <label className="field-label">
+                Reason for rejection
+                <input
+                  value={reason}
+                  maxLength={500}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Required when rejecting a draft"
+                />
+              </label>
+            )}
             <div className="callout">
               <ShieldCheck size={15} />
               Approval records a local demo decision only.
@@ -354,19 +505,89 @@ export function Automations({
               <Button variant="outline" onClick={() => setSelected(null)}>
                 Close
               </Button>
+              {draft.status === 'Needs review' && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEditing(!editing);
+                      setBody(draft.body);
+                    }}
+                  >
+                    {editing ? 'Cancel editing' : 'Edit draft'}
+                  </Button>
+                  {editing && (
+                    <Button
+                      disabled={!body.trim()}
+                      onClick={() => {
+                        const at = new Date().toISOString();
+                        setDrafts(
+                          drafts.map((d) =>
+                            d.id === draft.id
+                              ? {
+                                  ...d,
+                                  body: body.trim(),
+                                  updated: at,
+                                  history: [...(d.history ?? []), { at, action: 'Draft edited' }],
+                                }
+                              : d,
+                          ),
+                        );
+                        setEditing(false);
+                        notify('Draft changes saved locally.');
+                      }}
+                    >
+                      Save draft
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    disabled={!reason.trim() || editing}
+                    onClick={() => {
+                      const at = new Date().toISOString();
+                      setDrafts(
+                        drafts.map((d) =>
+                          d.id === draft.id
+                            ? {
+                                ...d,
+                                status: 'Rejected',
+                                reason: reason.trim(),
+                                updated: at,
+                                history: [...(d.history ?? []), { at, action: 'Draft rejected' }],
+                              }
+                            : d,
+                        ),
+                      );
+                      notify('Draft rejected locally.');
+                    }}
+                  >
+                    Reject draft
+                  </Button>
+                </>
+              )}
               <Button
-                disabled={draft.status !== 'Needs review'}
+                disabled={editing || draft.status !== 'Needs review'}
                 onClick={() => {
                   setDrafts(
                     drafts.map((d) =>
-                      d.id === draft.id ? { ...d, status: 'Approved in demo' } : d,
+                      d.id === draft.id
+                        ? {
+                            ...d,
+                            status: 'Approved in demo',
+                            updated: new Date().toISOString(),
+                            history: [
+                              ...(d.history ?? []),
+                              { at: new Date().toISOString(), action: 'Approval recorded locally' },
+                            ],
+                          }
+                        : d,
                     ),
                   );
                   notify('Demo approval saved locally. No external action was taken.');
                 }}
               >
                 <CheckCheck size={15} />
-                {draft.status === 'Needs review' ? 'Approve demo draft' : 'Approved in demo'}
+                {draft.status === 'Needs review' ? 'Approve demo draft' : draft.status}
               </Button>
             </div>
           </>
