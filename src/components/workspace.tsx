@@ -32,17 +32,17 @@ import { BusinessProvider, WorkspaceIdentity, useBusiness } from '@/lib/business
 import type { Automation, Module, BusinessAlert } from '@/types/business';
 const modules: Module[] = [...navigation.map((n) => n.label), 'Settings'];
 const descriptions: Record<Module, string> = {
-  Overview: 'A clear view of your business. A confident next move.',
-  'AI Assistant': 'Business context. Clear answers. Your next best action.',
-  Analytics: 'Turn your numbers into a clearer picture.',
-  Customers: 'Build stronger relationships with every account.',
-  Sales: 'Every order, from first click to final delivery.',
-  Inventory: 'The right products. The right stock levels.',
-  Finance: 'Keep cash flow moving in the right direction.',
-  Alerts: 'The signals that deserve your attention.',
-  Automations: 'Less repetitive work. More room to move.',
-  Reports: 'Business insights, ready to take with you.',
-  Settings: 'Make this workspace work for you.',
+  Overview: 'Sales performance, receivables and operational priorities.',
+  'AI Assistant': 'Analyze your records and investigate business questions.',
+  Analytics: 'Revenue trends and account performance across your business.',
+  Customers: 'Manage account details, contacts and customer activity.',
+  Sales: 'Track orders, fulfillment status and order value.',
+  Inventory: 'Manage your catalog, stock levels and reorder thresholds.',
+  Finance: 'Review invoices, outstanding balances and payments.',
+  Alerts: 'Review exceptions and follow up on outstanding issues.',
+  Automations: 'Prepare business actions and manage the approval queue.',
+  Reports: 'Build and export reports from your business records.',
+  Settings: 'Manage workspace details, preferences and connections.',
 };
 const defaults: Preferences = {
   companyName: 'TechNova Distributors',
@@ -409,7 +409,7 @@ function WorkspaceContent() {
                 }}
               >
                 <Search size={15} />
-                <span>Search anything...</span>
+                <span>Search workspace</span>
                 <kbd>⌘ K</kbd>
               </button>
               <span className="topbar-divider" />
@@ -445,11 +445,6 @@ function WorkspaceContent() {
             )}
             <div className="page-heading">
               <div>
-                <div className="page-eyebrow">
-                  {active === 'Overview'
-                    ? 'YOUR BUSINESS. IN FOCUS.'
-                    : `${preferences.companyName.toUpperCase()} / ${active.toUpperCase()}`}
-                </div>
                 <h1>{active === 'Overview' ? 'Business overview' : active}</h1>
                 <p>{descriptions[active]}</p>
               </div>
@@ -470,8 +465,8 @@ function WorkspaceContent() {
                 )}
                 {active === 'Overview' && (
                   <Button onClick={() => navigate('AI Assistant')}>
-                    <Sparkles size={15} />
-                    Ask AI
+                    <ArrowUpRight size={15} />
+                    Open assistant
                   </Button>
                 )}
                 {active === 'Reports' && (
@@ -558,9 +553,7 @@ function WorkspaceContent() {
                 <span className="live-dot" />
                 Demo workspace <i>·</i> Fictional business data
               </span>
-              <span>
-                Clarity for what comes next.<span className="footer-brand">nexus.</span>
-              </span>
+              <span>Snapshot: November 14, 2026 · USD</span>
             </footer>
           </main>
         </div>

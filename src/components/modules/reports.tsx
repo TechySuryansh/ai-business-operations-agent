@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { ArrowDownToLine, FileSpreadsheet, LoaderCircle } from 'lucide-react';
+import { ArrowDownToLine, LoaderCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Empty } from '@/components/ui/shared';
@@ -24,7 +24,29 @@ const defaults: Config = {
   hidden: [],
   format: 'xlsx',
 };
-const label = (key: string) => key.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase());
+const label = (key: string) =>
+  (
+    ({
+      id: 'Record ID',
+      sku: 'SKU',
+      revenue: 'Lifetime revenue',
+      orders: 'Lifetime orders',
+      sold: 'Units sold',
+      lastOrder: 'Last order',
+      reorder: 'Reorder threshold',
+      price: 'Unit price',
+    }) as Record<string, string>
+  )[key] ?? key.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase());
+const numericColumns = [
+  'amount',
+  'price',
+  'revenue',
+  'orders',
+  'sold',
+  'stock',
+  'reorder',
+  'items',
+];
 const value = (key: string, v: unknown) =>
   ['amount', 'price', 'revenue'].includes(key)
     ? money(Number(v))
@@ -153,7 +175,11 @@ export function Reports({ notify }: { notify: (s: string) => void }) {
         <thead>
           <tr>
             {visibleKeys.map((k) => (
-              <th scope="col" key={k}>
+              <th
+                scope="col"
+                key={k}
+                className={numericColumns.includes(k) ? 'numeric' : undefined}
+              >
                 {label(k)}
               </th>
             ))}
@@ -163,7 +189,9 @@ export function Reports({ notify }: { notify: (s: string) => void }) {
           {exportRows.map((row, i) => (
             <tr key={String(row.id ?? i)}>
               {visibleKeys.map((k) => (
-                <td key={k}>{value(k, row[k])}</td>
+                <td key={k} className={numericColumns.includes(k) ? 'numeric' : undefined}>
+                  {value(k, row[k])}
+                </td>
               ))}
             </tr>
           ))}
@@ -172,18 +200,12 @@ export function Reports({ notify }: { notify: (s: string) => void }) {
     </div>
   );
   return (
-    <div className="module-stack">
-      <section className="report-banner">
-        <div className="report-banner-icon">
-          <FileSpreadsheet size={28} />
-        </div>
-        <div>
-          <span className="eyebrow">REPORT BUILDER</span>
-          <h2>Choose the data you need.</h2>
-          <p>Filter, preview and download your current local records.</p>
-        </div>
-      </section>
-      <section className="panel settings-panel">
+    <div className="module-stack reports-layout">
+      <div className="report-intro">
+        <h2>Report configuration</h2>
+        <p>Choose a dataset, apply filters and select the columns to export.</p>
+      </div>
+      <section className="panel settings-panel report-configuration" aria-busy={busy}>
         <div className="form-grid">
           <label className="field-label">
             Report dataset
@@ -263,55 +285,61 @@ export function Reports({ notify }: { notify: (s: string) => void }) {
             </select>
           </label>
         </div>
-        <fieldset className="report-columns">
-          <legend>Included columns</legend>
-          {keys.map((k) => (
-            <label key={k}>
-              <input
-                type="checkbox"
-                checked={!config.hidden.includes(k)}
-                onChange={() =>
-                  setConfig({
-                    ...config,
-                    hidden: config.hidden.includes(k)
-                      ? config.hidden.filter((c) => c !== k)
-                      : [...config.hidden, k],
-                  })
-                }
-              />
-              {label(k)}
-            </label>
-          ))}
-        </fieldset>
-        <form
-          className="save-report"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!name.trim()) return;
-            save(
-              [...saved.filter((s) => s.name !== name.trim()), { name: name.trim(), config }].slice(
-                -10,
-              ),
-            );
-            setName('');
-          }}
-        >
-          <input
-            aria-label="Report configuration name"
-            maxLength={40}
-            placeholder="Name this report"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <Button type="submit" variant="outline" disabled={!name.trim()}>
-            Save configuration
-          </Button>
-          {saved.length > 0 && (
-            <Button type="button" variant="ghost" onClick={() => save([])}>
-              Clear saved reports
+        <details className="report-advanced">
+          <summary>
+            Columns & saved reports <span>{visibleKeys.length} columns</span>
+          </summary>
+          <fieldset className="report-columns">
+            <legend>Included columns</legend>
+            {keys.map((k) => (
+              <label key={k}>
+                <input
+                  type="checkbox"
+                  checked={!config.hidden.includes(k)}
+                  onChange={() =>
+                    setConfig({
+                      ...config,
+                      hidden: config.hidden.includes(k)
+                        ? config.hidden.filter((c) => c !== k)
+                        : [...config.hidden, k],
+                    })
+                  }
+                />
+                {label(k)}
+              </label>
+            ))}
+          </fieldset>
+          <form
+            className="save-report"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!name.trim()) return;
+              save(
+                [
+                  ...saved.filter((s) => s.name !== name.trim()),
+                  { name: name.trim(), config },
+                ].slice(-10),
+              );
+              setName('');
+            }}
+          >
+            <input
+              aria-label="Report configuration name"
+              maxLength={40}
+              placeholder="Name this report"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <Button type="submit" variant="outline" disabled={!name.trim()}>
+              Save configuration
             </Button>
-          )}
-        </form>
+            {saved.length > 0 && (
+              <Button type="button" variant="ghost" onClick={() => save([])}>
+                Clear saved reports
+              </Button>
+            )}
+          </form>
+        </details>
         {invalidRange && (
           <p className="form-error" role="alert">
             The end date must be on or after the start date.
@@ -345,11 +373,15 @@ export function Reports({ notify }: { notify: (s: string) => void }) {
           </Button>
           <Button disabled={busy || !rows.length || !visibleKeys.length} onClick={generate}>
             {busy ? <LoaderCircle className="spin" size={15} /> : <ArrowDownToLine size={15} />}
-            Download {config.format.toUpperCase()}
+            {busy ? 'Exporting report…' : `Download ${config.format.toUpperCase()}`}
           </Button>
         </div>
       </section>
       <section className="panel report-table">
+        <div className="report-preview-heading">
+          <h2>Data preview</h2>
+          <span>{rows.length} matching records</span>
+        </div>
         {rows.length && visibleKeys.length ? (
           table
         ) : (
@@ -375,7 +407,7 @@ export function Reports({ notify }: { notify: (s: string) => void }) {
             Close
           </Button>
           <Button disabled={busy} onClick={generate}>
-            Download {config.format.toUpperCase()}
+            {busy ? 'Exporting report…' : `Download ${config.format.toUpperCase()}`}
           </Button>
         </div>
       </Dialog>

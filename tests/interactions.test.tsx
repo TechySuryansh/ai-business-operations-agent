@@ -212,6 +212,7 @@ test('saved table views restore search and filter after reload', async () => {
   fireEvent.change(screen.getByRole('textbox', { name: 'Search inventory...' }), {
     target: { value: 'Keychron' },
   });
+  fireEvent.click(screen.getByText('View options', { selector: 'summary' }));
   fireEvent.change(screen.getByRole('textbox', { name: 'Saved view name' }), {
     target: { value: 'Keyboards to reorder' },
   });
@@ -219,6 +220,7 @@ test('saved table views restore search and filter after reload', async () => {
   first.unmount();
   window.location.hash = '#inventory';
   render(<Workspace />);
+  fireEvent.click(screen.getByText('View options', { selector: 'summary' }));
   fireEvent.change(screen.getByRole('combobox', { name: 'Load saved view' }), {
     target: { value: 'Keyboards to reorder' },
   });
@@ -274,7 +276,9 @@ test('assistant inherits the reporting period and archives conversations', () =>
     />,
   );
   fireEvent.click(screen.getByRole('button', { name: 'How is my business doing?' }));
-  assert.ok(screen.getByText(/November 8–14, 2026/));
+  assert.ok(
+    within(screen.getByRole('log', { name: 'Conversation' })).getByText(/November 8–14, 2026/),
+  );
   assert.ok(screen.getByText(/\$79,900/));
   fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
   assert.ok(screen.getByRole('combobox', { name: 'Open saved conversation' }));

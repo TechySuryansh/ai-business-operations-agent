@@ -317,6 +317,20 @@ export function Records({
                 ),
               },
             ];
+  const summaryNotes: Record<RecordKind, string[]> = {
+    Customers: ['Accounts in the directory', 'Accounts marked active', 'Historical account totals'],
+    Sales: ['Current order ledger', 'Orders in the local ledger', 'Processing and shipped orders'],
+    Inventory: [
+      'Unique products in the catalog',
+      'Across all products',
+      'Stock below its reorder threshold',
+    ],
+    Finance: [
+      'Pending and overdue invoices',
+      'Past due at the Nov 14 snapshot',
+      'Fully paid invoices',
+    ],
+  };
   const exportRows = () => {
     try {
       const exportable = selected.length ? rows.filter((r) => selected.includes(r.id)) : rows;
@@ -338,11 +352,11 @@ export function Records({
   return (
     <div className="module-stack">
       <div className="summary-grid">
-        {summaries.map((s) => (
+        {summaries.map((s, index) => (
           <div className="panel summary-card" key={s.label}>
             <span>{s.label}</span>
             <strong>{s.value}</strong>
-            <small>{companyName} · local demo ledger</small>
+            <small>{summaryNotes[kind][index]}</small>
           </div>
         ))}
       </div>
@@ -376,76 +390,81 @@ export function Records({
             </Button>
           </div>
         </div>
-        <div className="table-options">
-          <details>
-            <summary>Columns</summary>
-            <div className="column-options">
-              {columns[kind].slice(1).map((c) => (
-                <label key={c.key}>
-                  <input
-                    type="checkbox"
-                    checked={!view.hidden.includes(c.key)}
-                    onChange={() =>
-                      change({
-                        hidden: view.hidden.includes(c.key)
-                          ? view.hidden.filter((k) => k !== c.key)
-                          : [...view.hidden, c.key],
-                      })
-                    }
-                  />
-                  {c.label}
-                </label>
-              ))}
-            </div>
-          </details>
-          <label>
-            Saved views{' '}
-            <select
-              aria-label="Load saved view"
-              value=""
-              onChange={(e) => {
-                const found = saved.find((v) => v.name === e.target.value);
-                if (found) change(found.view);
+        <details className="table-settings">
+          <summary>
+            View options <span>Columns, saved views & filters</span>
+          </summary>
+          <div className="table-options">
+            <details>
+              <summary>Columns</summary>
+              <div className="column-options">
+                {columns[kind].slice(1).map((c) => (
+                  <label key={c.key}>
+                    <input
+                      type="checkbox"
+                      checked={!view.hidden.includes(c.key)}
+                      onChange={() =>
+                        change({
+                          hidden: view.hidden.includes(c.key)
+                            ? view.hidden.filter((k) => k !== c.key)
+                            : [...view.hidden, c.key],
+                        })
+                      }
+                    />
+                    {c.label}
+                  </label>
+                ))}
+              </div>
+            </details>
+            <label>
+              Saved views{' '}
+              <select
+                aria-label="Load saved view"
+                value=""
+                onChange={(e) => {
+                  const found = saved.find((v) => v.name === e.target.value);
+                  if (found) change(found.view);
+                }}
+              >
+                <option value="">Choose a view</option>
+                {saved.map((v) => (
+                  <option key={v.name}>{v.name}</option>
+                ))}
+              </select>
+            </label>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const name = viewName.trim();
+                if (!name) return;
+                persistViews([...saved.filter((v) => v.name !== name), { name, view }].slice(-10));
+                setViewName('');
               }}
             >
-              <option value="">Choose a view</option>
-              {saved.map((v) => (
-                <option key={v.name}>{v.name}</option>
-              ))}
-            </select>
-          </label>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const name = viewName.trim();
-              if (!name) return;
-              persistViews([...saved.filter((v) => v.name !== name), { name, view }].slice(-10));
-              setViewName('');
-            }}
-          >
-            <input
-              aria-label="Saved view name"
-              placeholder="Name this view"
-              value={viewName}
-              maxLength={40}
-              onChange={(e) => setViewName(e.target.value)}
-            />
-            <Button type="submit" size="sm" variant="outline" disabled={!viewName.trim()}>
-              <Save size={14} />
-              Save view
-            </Button>
-          </form>
-          {saved.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => persistViews([])}>
-              Clear saved views
-            </Button>
-          )}
-          {(view.q || view.status !== 'All' || view.hidden.length > 0 || view.sort) && (
-            <Button variant="ghost" size="sm" onClick={() => change(defaultView)}>
-              Reset filters
-            </Button>
-          )}
-        </div>
+              <input
+                aria-label="Saved view name"
+                placeholder="Name this view"
+                value={viewName}
+                maxLength={40}
+                onChange={(e) => setViewName(e.target.value)}
+              />
+              <Button type="submit" size="sm" variant="outline" disabled={!viewName.trim()}>
+                <Save size={14} />
+                Save view
+              </Button>
+            </form>
+            {saved.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={() => persistViews([])}>
+                Clear saved views
+              </Button>
+            )}
+            {(view.q || view.status !== 'All' || view.hidden.length > 0 || view.sort) && (
+              <Button variant="ghost" size="sm" onClick={() => change(defaultView)}>
+                Reset filters
+              </Button>
+            )}
+          </div>
+        </details>
         <div className="table-scroll">
           <table>
             <caption className="sr-only">{kind} · current local records · amounts in USD</caption>
@@ -470,6 +489,19 @@ export function Records({
                 {shownColumns.map((c) => (
                   <th
                     key={c.key}
+                    className={
+                      [
+                        'amount',
+                        'price',
+                        'revenue',
+                        'stock',
+                        'reorder',
+                        'items',
+                        'orders',
+                      ].includes(c.key)
+                        ? 'numeric'
+                        : undefined
+                    }
                     scope="col"
                     aria-sort={
                       view.sort === c.key
@@ -519,7 +551,19 @@ export function Records({
                   {shownColumns.map((c, i) => (
                     <td
                       key={c.key}
-                      className={['amount', 'price', 'revenue'].includes(c.key) ? 'amount' : ''}
+                      className={
+                        [
+                          'amount',
+                          'price',
+                          'revenue',
+                          'stock',
+                          'reorder',
+                          'items',
+                          'orders',
+                        ].includes(c.key)
+                          ? 'numeric amount'
+                          : ''
+                      }
                     >
                       {i === 0 ? (
                         <>

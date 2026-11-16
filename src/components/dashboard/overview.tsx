@@ -4,20 +4,17 @@ import {
   ArrowDown,
   ArrowRight,
   ArrowUpRight,
-  Bell,
   CircleDollarSign,
   CreditCard,
   FileText,
   Package,
   ShoppingBag,
-  Sparkles,
   TrendingUp,
   Users,
   Zap,
 } from 'lucide-react';
 import { RevenueChart } from './charts';
 import { SectionHeading, TextLink, StatusBadge } from '@/components/ui/shared';
-import { Button } from '@/components/ui/button';
 import { activities } from '@/data/mock-data';
 import { getMetrics } from '@/lib/demo-analytics';
 import { money, number } from '@/lib/utils';
@@ -42,17 +39,17 @@ export function Overview({
   const metrics = getMetrics(days, data);
   const stats = [
     {
-      label: 'Period revenue',
+      label: 'Revenue',
       value: money(metrics.revenue),
       change: `${metrics.growth}%`,
       detail: 'vs. previous period',
       icon: CircleDollarSign,
     },
     {
-      label: 'Period orders',
+      label: 'Orders',
       value: number(metrics.orders),
       change: `${days} days`,
-      detail: 'historical daily aggregates',
+      detail: 'in selected period',
       icon: ShoppingBag,
     },
     {
@@ -66,39 +63,13 @@ export function Overview({
       label: 'Active customers',
       value: number(metrics.activeCustomers),
       change: `${metrics.inactiveCustomers} inactive`,
-      detail: 'ready for a follow-up',
+      detail: 'in the account directory',
       icon: Users,
     },
   ];
   const top = [...products].sort((a, b) => b.revenue - a.revenue).slice(0, 4);
   return (
     <div className="overview-grid">
-      <p className="data-scope">
-        Revenue and order trends: Nov {15 - days}–14, 2026. Balances, customers and stock: current
-        local records. Product rankings: lifetime sample totals.
-      </p>
-      <div className="insight-banner">
-        <div className="insight-mark">
-          <Sparkles size={20} />
-        </div>
-        <div>
-          <div className="eyebrow">
-            YOUR BUSINESS, AT A GLANCE <span className="live-dot" />{' '}
-            <span className="ai-caption">Calculated summary · demo snapshot</span>
-          </div>
-          <p>
-            Revenue is up <strong>{metrics.growth}%</strong>. A strong period, with a few things to
-            keep an eye on.
-          </p>
-          <span>
-            {metrics.lowStock} products need restocking and {metrics.overdue} invoices are overdue.
-            Let’s stay ahead of them.
-          </span>
-        </div>
-        <button onClick={() => ask('How is my business doing?')}>
-          Explore insights <ArrowRight size={16} />
-        </button>
-      </div>
       <div className="metrics-grid">
         {stats.map((stat, i) => (
           <button
@@ -108,10 +79,7 @@ export function Overview({
               navigate((['Analytics', 'Sales', 'Finance', 'Customers'] as Module[])[i])
             }
           >
-            <div className="metric-label">
-              {stat.label}
-              <stat.icon size={16} />
-            </div>
+            <div className="metric-label">{stat.label}</div>
             <div className="metric-main">
               <strong>{stat.value}</strong>
             </div>
@@ -127,19 +95,22 @@ export function Overview({
           </button>
         ))}
       </div>
+      <div className="period-brief">
+        <span className="brief-label">Period summary</span>
+        <p>
+          Revenue increased <strong>{metrics.growth}%</strong> against the comparison period.{' '}
+          <strong>{metrics.overdue} invoices</strong> are overdue and{' '}
+          <strong>{metrics.lowStock} products</strong> are below reorder level.
+        </p>
+        <button className="text-link" onClick={() => ask('How is my business doing?')}>
+          Analyze performance <ArrowUpRight size={13} />
+        </button>
+      </div>
       <section className="panel revenue-panel">
         <SectionHeading
-          title="Revenue overview"
-          description={`Nov ${15 - days}–14, 2026 · Historical daily sales aggregates`}
+          title="Revenue performance"
+          description={`Daily revenue · Nov ${15 - days}–14, 2026`}
         />
-        <div className="chart-summary">
-          <strong>{money(metrics.revenue)}</strong>
-          <span className="change-green">
-            <TrendingUp size={12} />
-            {metrics.growth}%
-          </span>
-          <span>vs. previous period</span>
-        </div>
         <RevenueChart days={days} />
         <div className="chart-legend">
           <span>
@@ -154,10 +125,10 @@ export function Overview({
       </section>
       <section className="panel attention-panel">
         <SectionHeading
-          title="Needs your attention"
+          title="Needs attention"
           action={<span className="count-pill">{alerts.length}</span>}
         />
-        <p className="panel-subtitle">Small actions. A healthier business.</p>
+        <p className="panel-subtitle">Exceptions in your current records</p>
         <div className="attention-list">
           {alerts.length === 0 ? (
             <div className="all-clear">
@@ -166,12 +137,12 @@ export function Overview({
               <p>No active alerts to review.</p>
             </div>
           ) : (
-            alerts.map((alert, i) => (
+            alerts.map((alert) => (
               <button className="attention-item" key={alert.id} onClick={() => navigate('Alerts')}>
                 <span className={`attention-icon attention-${alert.severity.toLowerCase()}`}>
-                  {i === 0 ? (
+                  {alert.category === 'Inventory' ? (
                     <Package size={16} />
-                  ) : i === 1 ? (
+                  ) : alert.category === 'Finance' ? (
                     <CreditCard size={16} />
                   ) : (
                     <Users size={16} />
@@ -183,8 +154,8 @@ export function Overview({
                     {alert.category === 'Inventory'
                       ? 'Below their reorder threshold'
                       : alert.category === 'Finance'
-                        ? 'Follow up to keep cash flowing'
-                        : 'A good time to reconnect'}
+                        ? 'Unpaid past the due date'
+                        : 'Accounts marked inactive'}
                   </p>
                   <span>
                     {alert.action}
@@ -256,7 +227,8 @@ export function Overview({
       </section>
       <section className="panel products-panel">
         <SectionHeading
-          title="Top products"
+          title="Product revenue"
+          description="Top products · lifetime sample"
           action={<TextLink onClick={() => navigate('Inventory', '')}>View all</TextLink>}
         />
         <div className="top-products">
@@ -270,6 +242,13 @@ export function Overview({
               <div>
                 <strong>{p.name}</strong>
                 <span>{p.sold} units sold</span>
+                <div className="product-revenue-track">
+                  <i
+                    style={{
+                      width: `${(p.revenue / Math.max(1, ...top.map((product) => product.revenue))) * 100}%`,
+                    }}
+                  />
+                </div>
               </div>
               <b>{money(p.revenue)}</b>
             </button>
@@ -322,7 +301,7 @@ export function Overview({
               </div>
               <div className="activity-value">
                 <strong>{a.value}</strong>
-                <span>Snapshot activity</span>
+                <span>{a.time}</span>
               </div>
             </button>
           ))}
@@ -330,8 +309,8 @@ export function Overview({
       </section>
       <section className="panel work-queue">
         <SectionHeading
-          title="Your work queue"
-          description="Current local records · historical charts stay unchanged"
+          title="Operational queue"
+          description="Actions available in this workspace"
         />
         <div className="task-list">
           <button onClick={() => navigate('Finance', 'status=Overdue')}>
@@ -367,6 +346,14 @@ export function Overview({
           </div>
         )}
       </section>
+      <details className="overview-sources">
+        <summary>About these figures</summary>
+        <p>
+          Revenue and order trends are historical aggregates for Nov {15 - days}–14, 2026.
+          Receivables and stock reflect current local records. Product revenue and customer totals
+          are lifetime samples.
+        </p>
+      </details>
     </div>
   );
 }

@@ -50,7 +50,11 @@ src/
 
 ## Design system
 
-Light canvas, white cards, deep navy/charcoal ink, thin cool borders and restrained indigo accents. The spacing scale uses 4px steps. Cards have 8–10px corners; dialogs use 14px corners. Shared controls have visible focus states, and Radix dialogs provide focus trapping and keyboard dismissal. The sidebar becomes a focus-managed mobile drawer, grids stack at tablet/mobile sizes, and tables scroll inside their cards. Supporting text has a 12px floor; mobile form controls use 16px text. Charts include accessible data tables, and a skip link moves focus to the main content.
+The application uses locally hosted Geist typography, charcoal text, a white working canvas, neutral navigation and one cobalt action color. Shared controls follow a consistent size and spacing scale. Borders define working surfaces; shadows are limited to dialogs and notifications.
+
+Each module uses a layout suited to its task: grouped dashboard metrics, dense record tables, workflow/exception rows, a report configuration/preview split, and an analysis workspace with source context. Advanced table and report controls use disclosures to keep primary actions visible. No dependencies were added for the redesign.
+
+See [DESIGN.md](DESIGN.md) for the component, typography, spacing and responsive conventions.
 
 ## Data and integration boundary
 

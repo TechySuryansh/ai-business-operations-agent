@@ -60,43 +60,47 @@ export function Alerts({
           <Bell size={24} />
         </div>
         <div>
-          <h2>Stay one step ahead.</h2>
+          <h2>{active.length} active exceptions</h2>
           <p>
             {active.length
               ? `${active.length} business signals are ready for your review.`
               : 'All business signals have been reviewed.'}{' '}
-            Your rules keep the important things in view.
+            Review each exception or adjust its review status.
           </p>
         </div>
         <Button variant="outline" onClick={() => setRuleOpen(true)}>
           View monitoring rules
         </Button>
       </div>
-      <div className="filter-tabs standalone" role="group" aria-label="Alert filters">
-        <button
-          aria-pressed={!history}
-          className={!history ? 'active' : ''}
-          onClick={() => setHistory(false)}
-        >
-          Active ({active.length})
-        </button>
-        <button
-          aria-pressed={history}
-          className={history ? 'active' : ''}
-          onClick={() => setHistory(true)}
-        >
-          Reviewed & snoozed
-        </button>
-        {['All alerts', 'Inventory', 'Finance', 'Sales'].map((f) => (
+      <div className="alert-filter-toolbar">
+        <div className="filter-tabs standalone" role="group" aria-label="Alert review status">
           <button
-            key={f}
-            aria-pressed={filter === f}
-            className={filter === f ? 'active' : ''}
-            onClick={() => setFilter(f)}
+            aria-pressed={!history}
+            className={!history ? 'active' : ''}
+            onClick={() => setHistory(false)}
           >
-            {f}
+            Active ({active.length})
           </button>
-        ))}
+          <button
+            aria-pressed={history}
+            className={history ? 'active' : ''}
+            onClick={() => setHistory(true)}
+          >
+            Reviewed & snoozed
+          </button>
+        </div>
+        <label className="category-filter">
+          Category
+          <select
+            aria-label="Alert category"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+          >
+            {['All alerts', 'Inventory', 'Finance', 'Sales'].map((category) => (
+              <option key={category}>{category}</option>
+            ))}
+          </select>
+        </label>
       </div>
       {lastReviewed && (
         <div className="alert-undo" role="status">
@@ -206,7 +210,8 @@ export function Alerts({
       )}
       <div className="demo-note">
         <ShieldCheck size={14} />
-        Alerts are predefined sample signals, evaluated as of November 14, 2026.
+        Alerts use current local records. Overdue dates are evaluated against the November 14, 2026
+        snapshot.
       </div>
       <Dialog
         open={ruleOpen}
@@ -341,7 +346,7 @@ export function Automations({
       <div className="callout purple">
         <ShieldCheck size={19} />
         <div>
-          <strong>You stay in control.</strong>
+          <strong>Drafts require your approval</strong>
           <p>
             Workflows prepare drafts for review. These simulations never send messages, place orders
             or change the local ledger.
@@ -407,7 +412,8 @@ export function Automations({
               </div>
               <div className="automation-meta">
                 <Clock3 size={13} />
-                <span>{item.lastRun}</span>
+                <span>{item.lastRun.replace('Today', 'Nov 14')}</span>
+                <span>{item.runs} runs</span>
                 <Badge tone={item.enabled ? 'green' : 'neutral'}>
                   {item.enabled ? 'Enabled' : 'Paused'}
                 </Badge>
@@ -446,7 +452,17 @@ export function Automations({
                     {Number.isNaN(Date.parse(d.created)) ? d.created : formatTime(d.created)}
                   </span>
                 </div>
-                <Badge tone={d.status === 'Needs review' ? 'amber' : 'green'}>{d.status}</Badge>
+                <Badge
+                  tone={
+                    d.status === 'Needs review'
+                      ? 'amber'
+                      : d.status === 'Rejected'
+                        ? 'red'
+                        : 'green'
+                  }
+                >
+                  {d.status}
+                </Badge>
                 <ArrowRight size={16} />
               </button>
             ))
@@ -468,7 +484,17 @@ export function Automations({
       >
         {draft && (
           <>
-            <Badge tone={draft.status === 'Needs review' ? 'amber' : 'green'}>{draft.status}</Badge>
+            <Badge
+              tone={
+                draft.status === 'Needs review'
+                  ? 'amber'
+                  : draft.status === 'Rejected'
+                    ? 'red'
+                    : 'green'
+              }
+            >
+              {draft.status}
+            </Badge>
             {editing ? (
               <label className="field-label">
                 Draft content

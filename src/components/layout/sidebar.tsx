@@ -14,11 +14,9 @@ import {
   Workflow,
   FileText,
   Settings,
-  ChevronDown,
-  ArrowUpRight,
   PanelLeftClose,
   X,
-  Command,
+  Layers,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Module } from '@/types/business';
@@ -76,11 +74,9 @@ export function Sidebar({
       )}
       <div className="brand">
         <div className="brand-symbol">
-          <Command size={21} strokeWidth={2.4} />
+          <Layers size={17} strokeWidth={2} />
         </div>
-        <span>
-          nexus<span className="brand-dot">.</span>
-        </span>
+        <span>nexus</span>
         <button className="mobile-close icon-button" onClick={close} aria-label="Close navigation">
           <X size={18} />
         </button>
@@ -102,7 +98,7 @@ export function Sidebar({
         <div className="company-avatar">{initials(companyName)}</div>
         <div>
           <strong>{companyName}</strong>
-          <span>Business workspace</span>
+          <span>Operations workspace</span>
         </div>
       </button>
       <nav aria-label="Main navigation">
@@ -118,7 +114,6 @@ export function Sidebar({
             >
               <Icon size={18} strokeWidth={1.8} />
               <span>{label}</span>
-              {label === 'AI Assistant' && <span className="new-label">NEW</span>}
               {label === 'Alerts' && alertCount > 0 && (
                 <span className="nav-count">{alertCount}</span>
               )}
@@ -127,20 +122,6 @@ export function Sidebar({
         ))}
       </nav>
       <div className="sidebar-bottom">
-        <div className="sidebar-help">
-          <div className="help-icon">
-            <Sparkles size={16} />
-          </div>
-          <strong>A little less busywork.</strong>
-          <p>
-            Let your business assistant
-            <br />
-            handle the heavy lifting.
-          </p>
-          <button onClick={() => go('AI Assistant')}>
-            Meet your assistant <ArrowUpRight size={14} />
-          </button>
-        </div>
         <button
           aria-label="Settings"
           title="Settings"
