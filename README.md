@@ -1,15 +1,21 @@
-# Nexus — AI Business Operations frontend
+# Nexus — Business Operations workspace
 
-A frontend-only SaaS workspace for the fictional **TechNova Distributors** electronics distribution company. Built with Next.js App Router, React, strict TypeScript, Tailwind CSS, shadcn-style Radix UI primitives, Lucide and Recharts.
+A SaaS workspace with a Next.js/PostgreSQL backend and a separate fictional **TechNova Distributors** demo. Built with Next.js App Router, React, strict TypeScript, Tailwind CSS, shadcn-style Radix UI primitives, Lucide and Recharts.
 
 ## Run locally
 
 ```sh
 npm ci
+cp frontend/.env.example frontend/.env
+cp backend/.env.example backend/.env
+# Fill in your Supabase and database values, then:
+npm run db:migrate
 npm run dev
 ```
 
-Open http://127.0.0.1:3000. Use the sidebar to explore each module. Navigation, record details, table searches, status filters, sorting, pagination and column preferences are reflected in URL hashes. Module and record views can be bookmarked; browser back/forward works.
+`npm run dev` starts the frontend on port **3000** and backend on port **3001**. Use `npm run dev:frontend` or `npm run dev:backend` to run either separately. The demo works without external credentials; skip environment setup and migrations to explore it.
+
+Open http://127.0.0.1:3000 for the live application or `/demo` for the original fictional workspace. See [BACKEND_SETUP.md](BACKEND_SETUP.md) for database and Supabase Auth configuration. Use the sidebar to explore each module. Navigation, record details, table searches, status filters, sorting, pagination and column preferences are reflected in URL hashes. Module and record views can be bookmarked; browser back/forward works.
 
 ```sh
 npm run typecheck
@@ -17,7 +23,9 @@ npm test
 npm run build
 ```
 
-The production build produces a static site in `out/`. The build uses Webpack because the environment's sandbox blocks Turbopack's CSS worker from opening its internal port. `npm run dev` uses Next.js's default development bundler.
+The production build requires a Node-capable host; run both applications with `npm start`. Static export is no longer enabled. The build uses Webpack because the environment's sandbox blocks Turbopack's CSS worker from opening its internal port. `npm run dev` uses Next.js's default development bundler.
+
+For hosted setup and operational commands, see [DEPLOYMENT.md](DEPLOYMENT.md). Run `npm run setup:env` to create local environment files without overwriting existing values, and `npm run setup:check` to check what remains unconfigured.
 
 ## Implemented modules
 
@@ -34,19 +42,27 @@ The production build produces a static site in `out/`. The build uses Webpack be
 ## Structure
 
 ```text
-src/
-  app/                     App Router page, layout, global design styles
-  components/
-    ui/                    Shared button, dialog, badge, search and empty states
-    layout/                Navigation and workspace sidebar
-    dashboard/             Overview and reusable Recharts visualizations
-    modules/               Business views
-    workspace.tsx          Client workspace composition and state
-  data/mock-data.ts        All fictional business records and sample copy
-  lib/                     Deterministic analytics, assistant, exports, formatting
-  types/business.ts        Typed business entities
- tests/                    Calculation, export and React interaction tests
+frontend/                 Next.js UI application (port 3000)
+  src/app/                Pages, layouts, login and auth callback
+  src/components/         Dashboard, modules, navigation and controls
+  src/lib/                UI state, demo analytics, exports and auth helpers
+  src/data/               Fictional demo records
+  src/types/              UI business entities
+  tests/                  UI, analytics and export tests
+  .env.example            Public Supabase settings and backend destination
+backend/                  Next.js API application (port 3001)
+  src/app/api/            Business endpoints and job runner
+  src/server/             Auth checks, business services, jobs and database client
+  src/lib/supabase/       Server-only Supabase session helper
+  prisma/                 Database schema and SQL migrations
+  tests/                  Business rules and PostgreSQL integration checks
+  .env.example            Database, server auth settings and job secret
+scripts/run-apps.mjs       Starts and stops both applications together
+package.json              Workspace commands
+package-lock.json         Shared dependency lockfile
 ```
+
+Each application owns its package manifest, TypeScript/Next.js configuration and environment file. Run `npm ci` from the repository root. Frontend requests to `/api/*` are forwarded to `BACKEND_URL`, retaining the same-origin cookie login flow. Only the backend receives database credentials. Neither app imports the other app’s source.
 
 ## Design system
 
@@ -58,20 +74,18 @@ See [DESIGN.md](DESIGN.md) for the component, typography, spacing and responsive
 
 ## Data and integration boundary
 
-**No backend APIs, database, authentication, live AI, payments, emails or external business integrations exist.** There are no credentials or environment variables to configure. Nothing is transmitted to an AI service.
+The live app uses Supabase Auth, company-scoped Next.js APIs, Prisma and PostgreSQL. Orders have line items and atomic stock deductions; invoices and manual payments preserve financial history. Shared settings, alerts, draft jobs, approvals and private assistant conversations are persisted server-side. The assistant uses deterministic company-data queries; no external AI or payment gateway is connected.
 
-- `src/data/mock-data.ts` provides the original samples. `src/lib/business-context.tsx` owns validated, persisted local record edits and a capped activity history. Future API adapters should replace this boundary rather than introducing fetch calls throughout components.
-- `src/lib/demo-analytics.ts` computes business metrics from the mock arrays.
-- `src/lib/demo-assistant.ts` uses explicitly supported keyword matching and deterministic calculations. It is not a general-purpose AI implementation.
-- Workflow approval only changes local UI state. It never changes invoices, stock or orders and never sends messages.
-- Browser local storage contains edited records, activity, preferences, reviewed/snoozed alerts, saved table/report views, simulated drafts and conversations. Reset under Settings → Demo data clears all local changes and restores the original samples. Storage failures are surfaced in the UI.
-- Source data represents **November 14, 2026**, in USD. Daily sales are aggregate data for November 1–14; recent orders are a smaller example list. Product/customer revenue are separate lifetime samples. These intentionally different data scopes are labeled in the UI. Local order edits do not rewrite historical daily sales or lifetime sample totals. Customer renames update linked local order and invoice references. Invoices are linked by customer; no order-to-invoice relationship is fabricated.
-- A digest toggle saves a preference only. No notification scheduling is implemented.
+The original `/demo` retains its localStorage records and fictional November 14, 2026 analytics. It never automatically seeds a live company. Live failures never silently fall back to mock data.
+
+See [BACKEND_PLAN.md](BACKEND_PLAN.md) for the design and [BACKEND_SETUP.md](BACKEND_SETUP.md) for credentials, migrations, permissions, testing, deployment, limitations and remaining launch checks. No Supabase project or production infrastructure is provisioned automatically.
 
 ## Verification
 
-The 26 automated tests cover metric totals and scopes, customer references, persistence validation, currency precision, assistant periods/conversations, workbook/PDF creation, table sorting/pagination/saved views, record creation/rename, payments and reload persistence, alerts, contextual navigation, editable/rejected drafts and report filters.
+Automated tests cover metric totals and scopes, customer references, persistence validation, currency precision, assistant periods/conversations, workbook/PDF creation, table sorting/pagination/saved views, record creation/rename, payments and reload persistence, alerts, contextual navigation, editable/rejected drafts and report filters.
 
-Browser QA checks all 11 modules at 1440, 1024, 768, 390 and 320px widths. Desktop and mobile screenshots were inspected. Keyboard checks cover mobile drawer focus trapping, Escape/focus restoration, record details, command search and persisted sidebar collapse. Browser QA uses an isolated headless Chrome profile; no user browser data is accessed.
+The frontend redesign browser QA checked all 11 demo modules at 1440, 1024, 768, 390 and 320px widths. Desktop and mobile screenshots were inspected. Keyboard checks cover mobile drawer focus trapping, Escape/focus restoration, record details, command search and persisted sidebar collapse. Browser QA uses an isolated headless Chrome profile; no user browser data is accessed.
 
 The ExcelJS UUID dependency is overridden to a compatible patched v11 version. ExcelJS only uses its v4 export; the workbook round-trip test verifies report compatibility.
+
+Backend verification: `npm run test:backend` runs isolated real PostgreSQL checks. `npm test` includes backend rules and mocked live-form integration checks. Real Supabase authentication requires a configured project and separate end-to-end verification.

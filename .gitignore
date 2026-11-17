@@ -3,3 +3,10 @@ node_modules/
 out/
 *.tsbuildinfo
 .env*
+!.env.example
+backend/src/generated/prisma/
+
+# Database backups contain private company records.
+*.dump
+*.dump.*.partial
+backups/

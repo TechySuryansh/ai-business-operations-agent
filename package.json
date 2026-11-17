@@ -2,27 +2,31 @@
   "name": "technova-operations",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
-    "dev": "next dev --hostname 127.0.0.1",
-    "build": "next build --webpack",
-    "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test tests/*.test.ts*"
-  },
-  "dependencies": {
-    "@radix-ui/react-dialog": "^1.1.6",
-    "@radix-ui/react-slot": "^1.1.2",
-    "@tailwindcss/postcss": "^4.0.0",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "exceljs": "^4.4.0",
-    "jspdf": "^4.2.1",
-    "lucide-react": "^0.468.0",
-    "next": "^16.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "recharts": "^3.0.0",
-    "tailwind-merge": "^3.0.0",
-    "tailwindcss": "^4.0.0"
+    "dev": "node scripts/run-apps.mjs dev",
+    "dev:frontend": "npm run dev --workspace @nexus/frontend",
+    "dev:backend": "npm run dev --workspace @nexus/backend",
+    "build": "npm run build --workspaces",
+    "start": "node scripts/run-apps.mjs start",
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "npm run test --workspaces",
+    "test:backend": "npm run test:backend --workspace @nexus/backend",
+    "db:generate": "npm run db:generate --workspace @nexus/backend",
+    "db:validate": "npm run db:validate --workspace @nexus/backend",
+    "db:migrate": "npm run db:migrate --workspace @nexus/backend",
+    "db:dev": "npm run db:dev --workspace @nexus/backend",
+    "setup:env": "node scripts/setup-env.mjs",
+    "setup:check": "npm run setup:check --workspace @nexus/backend --",
+    "jobs:run": "npm run jobs:run --workspace @nexus/backend",
+    "auth:configure": "npm run auth:configure --workspace @nexus/backend --",
+    "db:backup": "npm run db:backup --workspace @nexus/backend --",
+    "db:restore-check": "npm run db:restore-check --workspace @nexus/backend --",
+    "test:ops": "npm run test:ops --workspace @nexus/backend",
+    "test:live": "npm run test:live --workspace @nexus/backend"
   },
   "overrides": {
     "exceljs": {
@@ -30,14 +34,9 @@
     }
   },
   "devDependencies": {
-    "@testing-library/react": "^16.3.3",
-    "@types/jsdom": "^30.0.0",
-    "@types/node": "^22.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "jsdom": "^31.0.1",
-    "prettier": "^3.10.1",
-    "tsx": "^4.23.15",
-    "typescript": "^5.7.0"
+    "prettier": "^3.10.1"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }
