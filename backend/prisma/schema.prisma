@@ -1,0 +1,261 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["erp"]
+}
+
+model User {
+  id          String       @id @db.Uuid
+  email       String
+  memberships Membership[]
+
+  @@schema("erp")
+}
+
+model Company {
+  id              String          @id @default(uuid()) @db.Uuid
+  name            String
+  timeZone        String          @default("UTC")
+  currency        String          @default("USD")
+  orderSequence   Int             @default(0)
+  invoiceSequence Int             @default(0)
+  createdAt       DateTime        @default(now())
+  memberships     Membership[]
+  customers       Customer[]
+  products        Product[]
+  orders          Order[]
+  invoices        Invoice[]
+  workspace       WorkspaceState?
+
+  @@schema("erp")
+}
+
+model Membership {
+  companyId String  @db.Uuid
+  userId    String  @db.Uuid
+  role      String  @default("staff")
+  company   Company @relation(fields: [companyId], references: [id])
+  user      User    @relation(fields: [userId], references: [id])
+
+  @@id([companyId, userId])
+  @@index([userId])
+  @@schema("erp")
+}
+
+model Customer {
+  id        String    @id @default(uuid()) @db.Uuid
+  companyId String    @db.Uuid
+  name      String
+  contact   String
+  email     String
+  location  String
+  status    String    @default("Active")
+  version   Int       @default(1)
+  createdAt DateTime  @default(now())
+  company   Company   @relation(fields: [companyId], references: [id])
+  orders    Order[]
+  invoices  Invoice[]
+
+  @@unique([companyId, id])
+  @@unique([companyId, name])
+  @@index([companyId, status, createdAt])
+  @@schema("erp")
+}
+
+model Product {
+  id        String              @id @default(uuid()) @db.Uuid
+  companyId String              @db.Uuid
+  name      String
+  category  String
+  sku       String
+  stock     Int                 @default(0)
+  reorder   Int                 @default(0)
+  price     Decimal             @db.Decimal(14, 2)
+  supplier  String
+  archived  Boolean             @default(false)
+  version   Int                 @default(1)
+  company   Company             @relation(fields: [companyId], references: [id])
+  items     OrderItem[]
+  movements InventoryMovement[]
+
+  @@unique([companyId, id])
+  @@unique([companyId, sku])
+  @@index([companyId, archived])
+  @@schema("erp")
+}
+
+model Order {
+  id         String      @id @default(uuid()) @db.Uuid
+  companyId  String      @db.Uuid
+  customerId String      @db.Uuid
+  number     String
+  date       DateTime    @default(now())
+  status     String      @default("Processing")
+  total      Decimal     @db.Decimal(14, 2)
+  version    Int         @default(1)
+  company    Company     @relation(fields: [companyId], references: [id])
+  customer   Customer    @relation(fields: [companyId, customerId], references: [companyId, id])
+  items      OrderItem[]
+  invoice    Invoice?
+
+  @@unique([companyId, id])
+  @@unique([companyId, number])
+  @@index([companyId, date])
+  @@schema("erp")
+}
+
+model OrderItem {
+  id          String  @id @default(uuid()) @db.Uuid
+  companyId   String  @db.Uuid
+  orderId     String  @db.Uuid
+  productId   String  @db.Uuid
+  description String
+  quantity    Int
+  unitPrice   Decimal @db.Decimal(14, 2)
+  total       Decimal @db.Decimal(14, 2)
+  order       Order   @relation(fields: [companyId, orderId], references: [companyId, id])
+  product     Product @relation(fields: [companyId, productId], references: [companyId, id])
+
+  @@index([companyId, orderId])
+  @@schema("erp")
+}
+
+model InventoryMovement {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @db.Uuid
+  productId String   @db.Uuid
+  quantity  Int
+  reason    String
+  reference String?
+  actorId   String   @db.Uuid
+  createdAt DateTime @default(now())
+  product   Product  @relation(fields: [companyId, productId], references: [companyId, id])
+
+  @@index([companyId, productId, createdAt])
+  @@schema("erp")
+}
+
+model Invoice {
+  id         String        @id @default(uuid()) @db.Uuid
+  companyId  String        @db.Uuid
+  customerId String        @db.Uuid
+  orderId    String        @unique @db.Uuid
+  number     String
+  issued     DateTime      @default(now())
+  due        DateTime      @db.Date
+  total      Decimal       @db.Decimal(14, 2)
+  voidedAt   DateTime?
+  version    Int           @default(1)
+  company    Company       @relation(fields: [companyId], references: [id])
+  customer   Customer      @relation(fields: [companyId, customerId], references: [companyId, id])
+  order      Order         @relation(fields: [companyId, orderId], references: [companyId, id])
+  items      InvoiceItem[]
+  payments   Payment[]
+
+  @@unique([companyId, id])
+  @@unique([companyId, orderId])
+  @@unique([companyId, number])
+  @@index([companyId, due])
+  @@schema("erp")
+}
+
+model InvoiceItem {
+  id          String  @id @default(uuid()) @db.Uuid
+  companyId   String  @db.Uuid
+  invoiceId   String  @db.Uuid
+  description String
+  quantity    Int
+  unitPrice   Decimal @db.Decimal(14, 2)
+  total       Decimal @db.Decimal(14, 2)
+  invoice     Invoice @relation(fields: [companyId, invoiceId], references: [companyId, id])
+
+  @@index([companyId, invoiceId])
+  @@schema("erp")
+}
+
+model Payment {
+  id             String    @id @default(uuid()) @db.Uuid
+  companyId      String    @db.Uuid
+  invoiceId      String    @db.Uuid
+  amount         Decimal   @db.Decimal(14, 2)
+  reference      String
+  createdAt      DateTime  @default(now())
+  reversedAt     DateTime?
+  reversalReason String?
+  invoice        Invoice   @relation(fields: [companyId, invoiceId], references: [companyId, id])
+
+  @@index([companyId, invoiceId])
+  @@schema("erp")
+}
+
+model AuditEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @db.Uuid
+  actorId   String   @db.Uuid
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@schema("erp")
+}
+
+model IdempotencyKey {
+  companyId   String   @db.Uuid
+  key         String
+  fingerprint String
+  result      Json
+  createdAt   DateTime @default(now())
+
+  @@id([companyId, key])
+  @@schema("erp")
+}
+
+model WorkspaceState {
+  companyId String  @id @db.Uuid
+  version   Int     @default(1)
+  data      Json
+  company   Company @relation(fields: [companyId], references: [id])
+
+  @@schema("erp")
+}
+
+model Conversation {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @db.Uuid
+  userId    String   @db.Uuid
+  messages  Json
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, userId, updatedAt])
+  @@schema("erp")
+}
+
+model Job {
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @db.Uuid
+  key         String
+  kind        String
+  status      String    @default("pending")
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now())
+  lockedAt    DateTime?
+  error       String?
+  result      Json?
+
+  @@unique([companyId, key])
+  @@index([status, availableAt])
+  @@schema("erp")
+}
+
+model RateLimit {
+  key       String   @id
+  count     Int      @default(1)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@schema("erp")
+}

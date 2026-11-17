@@ -4,12 +4,12 @@ Nexus is an operations workspace. Layouts prioritize records, comparisons and de
 
 ## Foundations
 
-- Self-hosted Geist, loaded with `next/font/local`; the bundled font's license is in `src/app/fonts/LICENSE.txt`.
+- Self-hosted Geist, loaded with `next/font/local`; the bundled font's license is in `frontend/src/app/fonts/LICENSE.txt`.
 - Type scale: 12px supporting text, 13px body/controls, 14–16px section titles, 23px page titles, 27–32px KPI values. Numbers use tabular figures.
 - Spacing scale: 4, 8, 12, 16, 24 and 32px.
 - White working canvas, neutral navigation surface, charcoal text, cobalt primary actions. Green, amber and red communicate business status only.
 - 4–6px corners for controls and panels. Shadows are reserved for dialogs and transient notifications.
-- The shared tokens and component styles live in `src/app/globals.css`, organized by component and responsive breakpoint.
+- The shared tokens and component styles live in `frontend/src/app/globals.css`, organized by component and responsive breakpoint.
 
 ## Page composition
 
