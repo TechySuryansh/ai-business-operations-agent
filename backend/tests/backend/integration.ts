@@ -427,9 +427,13 @@ async function main() {
     );
     assert.equal(filtered.total, 53);
     assert.equal((filtered.rows[0] as any).name, 'Account 104');
-    const timezoneScope = { ...s, timeZone: 'Asia/Kolkata' };
-    const timezoneSnapshot = await snapshot(timezoneScope),
-      timezoneSeries = await dailySales(timezoneScope);
+    const { timeZone } = await client.company.update({
+      where: { id: company.id },
+      data: { timeZone: 'Asia/Kolkata' },
+    });
+    const timezoneScope = { ...s, timeZone };
+    const timezoneSnapshot = await snapshot(timezoneScope);
+    const timezoneSeries = await dailySales(timezoneScope);
     assert.deepEqual(
       timezoneSeries.map(({ date, revenue, orders }) => ({ date, revenue, orders })),
       timezoneSnapshot.data.dailySales.map(({ date, revenue, orders }) => ({
@@ -438,6 +442,7 @@ async function main() {
         orders,
       })),
     );
+    await client.company.update({ where: { id: company.id }, data: { timeZone: s.timeZone } });
     const assistantRequest = {
       prompt: 'What is our revenue?',
       days: 7,
