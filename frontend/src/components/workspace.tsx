@@ -27,7 +27,7 @@ import { Button } from './ui/button';
 import { Dialog } from './ui/dialog';
 import { Empty, SearchInput } from './ui/shared';
 import { alerts as initialAlerts, automations as initialAutomations } from '@/data/mock-data';
-import { api } from '@/lib/backend-client';
+import { useWorkspaceSave } from '@/lib/use-workspace-save';
 import { LiveAutomations } from './modules/live-automations';
 import { LiveSettings } from './modules/live-settings';
 import type { LiveBootstrap } from '@/lib/business-context';
@@ -108,12 +108,11 @@ function WorkspaceContent() {
   const business = useBusiness();
   const live = business.live;
   const liveState = live?.workspace?.data as LocalState | undefined;
-  const workspaceVersion = useRef(live?.workspace?.version ?? 0);
-  const persistQueue = useRef(Promise.resolve());
-  const previousState = useRef('');
   const { customers, products, orders, invoices } = business.data;
   const remembered = useRef<Record<string, string>>({});
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    Boolean(liveState?.preferences.sidebarCollapsed),
+  );
   const [snoozed, setSnoozed] = useState<Record<string, number>>(liveState?.snoozed ?? {});
   const [clock, setClock] = useState(0);
   const [active, setActive] = useState<Module>('Overview');
@@ -251,43 +250,33 @@ function WorkspaceContent() {
     const timer = setInterval(() => setClock(Date.now()), 30000);
     return () => clearInterval(timer);
   }, []);
-  useEffect(() => {
-    if (live && loaded) {
-      const value = {
-        preferences: { ...preferences, sidebarCollapsed },
-        dismissed,
-        workflows,
-        drafts,
-        snoozed,
-      };
-      const encoded = JSON.stringify(value);
-      if (!previousState.current) {
-        previousState.current = encoded;
-        return;
-      }
-      if (previousState.current === encoded) return;
-      if (live.role === 'staff') {
-        notify('Your role cannot change shared workspace settings.');
-        return;
-      }
-      const timer = setTimeout(() => {
-        previousState.current = encoded;
-        persistQueue.current = persistQueue.current.then(async () => {
-          try {
-            const result = await api<{ version: number }>(`${live.company.id}/workspace`, {
-              version: workspaceVersion.current,
-              data: value,
-            });
-            workspaceVersion.current = result.version;
-          } catch (e) {
-            notify(
-              `Changes could not be saved: ${(e as Error).message} Reload to restore the server state.`,
-            );
-          }
-        });
-      }, 600);
-      return () => clearTimeout(timer);
+  const encodedSettings = JSON.stringify({
+    preferences: { ...preferences, sidebarCollapsed },
+    dismissed,
+    workflows,
+    drafts,
+    snoozed,
+  });
+  const settingsSave = useWorkspaceSave(
+    live && loaded && live.role !== 'staff' ? `${live.company.id}/workspace` : undefined,
+    encodedSettings,
+    live?.workspace?.version ?? 0,
+  );
+  const [refreshError, setRefreshError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  async function refreshLedger() {
+    setRefreshing(true);
+    setRefreshError('');
+    try {
+      await business.refresh();
+    } catch (error) {
+      setRefreshError((error as Error).message);
+    } finally {
+      setRefreshing(false);
     }
+  }
+  useEffect(() => {
+    if (live) return;
     if (loaded)
       try {
         localStorage.setItem(
@@ -500,13 +489,28 @@ function WorkspaceContent() {
             {live && (
               <div className="live-status">
                 <span>Connected · {live.role}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => business.refresh().catch((e) => notify(e.message))}
-                >
-                  Refresh ledger
+                <Button variant="ghost" size="sm" disabled={refreshing} onClick={refreshLedger}>
+                  {refreshing ? 'Refreshing…' : 'Refresh ledger'}
                 </Button>
+              </div>
+            )}
+            {refreshError && (
+              <div role="alert" className="callout amber">
+                {refreshError}{' '}
+                <Button onClick={refreshLedger} disabled={refreshing}>
+                  Retry ledger refresh
+                </Button>
+              </div>
+            )}
+            {settingsSave.saving && <p role="status">Saving workspace settings…</p>}
+            {settingsSave.error && (
+              <div role="alert" className="callout amber">
+                Settings could not be saved. {settingsSave.error}{' '}
+                {settingsSave.retry && (
+                  <Button onClick={settingsSave.retry} disabled={settingsSave.saving}>
+                    Retry settings save
+                  </Button>
+                )}
               </div>
             )}
             {business.storageError && (
@@ -605,16 +609,33 @@ function WorkspaceContent() {
                 <LiveAutomations
                   onState={(result) => {
                     const state = result.data as LocalState;
-                    workspaceVersion.current = result.version;
-                    setDrafts(state.drafts);
-                    setWorkflows(state.workflows);
-                    previousState.current = JSON.stringify({
-                      preferences: { ...preferences, sidebarCollapsed },
-                      dismissed,
-                      workflows: state.workflows,
-                      drafts: state.drafts,
-                      snoozed,
-                    });
+                    // Automation may advance the version. Adopt it only if shared settings still match.
+                    if (
+                      state.preferences.companyName !== preferences.companyName ||
+                      state.preferences.timeZone !== preferences.timeZone ||
+                      state.preferences.emailDigest !== preferences.emailDigest ||
+                      state.preferences.compactTables !== preferences.compactTables ||
+                      Boolean(state.preferences.sidebarCollapsed) !== sidebarCollapsed ||
+                      JSON.stringify(state.dismissed) !== JSON.stringify(dismissed) ||
+                      JSON.stringify(state.snoozed ?? {}) !== JSON.stringify(snoozed)
+                    )
+                      return;
+
+                    if (
+                      settingsSave.acceptServerState(
+                        result.version,
+                        JSON.stringify({
+                          preferences: { ...preferences, sidebarCollapsed },
+                          dismissed,
+                          workflows: state.workflows,
+                          drafts: state.drafts,
+                          snoozed,
+                        }),
+                      )
+                    ) {
+                      setDrafts(state.drafts);
+                      setWorkflows(state.workflows);
+                    }
                   }}
                 />
               ) : (

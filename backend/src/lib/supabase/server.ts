@@ -10,11 +10,8 @@ export async function supabaseServer() {
     cookies: {
       getAll: () => jar.getAll(),
       setAll(values) {
-        try {
-          values.forEach(({ name, value, options }) => jar.set(name, value, options));
-        } catch {
-          /* Server Components cannot set cookies; proxy refreshes the session. */
-        }
+        // Backend clients are used only in writable Route Handlers. Refresh here once.
+        values.forEach(({ name, value, options }) => jar.set(name, value, options));
       },
     },
   });

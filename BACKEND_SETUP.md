@@ -49,6 +49,8 @@ All business tables are in the private `erp` schema. **Do not expose `erp` in Su
 For deployment, create a separate restricted runtime PostgreSQL role with USAGE on `erp` and SELECT/INSERT/UPDATE/DELETE on its tables; reserve schema changes and migrations for an administrative role. Keep `erp` inaccessible to browser Data API roles. The application needs no Supabase service-role key. The runtime role may read all company rows, so backend authorization tests are mandatory; private-schema isolation is not per-tenant RLS.
 
 ## Authentication configuration
+
+For Google login/signup, follow [GOOGLE_AUTH_SETUP.md](GOOGLE_AUTH_SETUP.md). It includes the separate Google Cloud and Supabase callback URLs and verification checklist.
 In Supabase Auth URL Configuration set the site URL to `APP_URL` and allow the appropriate production and development redirect URLs.
 
 Configure the **Confirm signup** email template's confirmation link to:

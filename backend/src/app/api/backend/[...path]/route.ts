@@ -6,7 +6,9 @@ import { id, text, ApiError, authorize } from '@/server/rules';
 import { atomic, mutation } from '@/server/transaction';
 import { command } from '@/server/services';
 import { snapshot, listRecords } from '@/server/read-model';
+import { mutationPatch } from '@/server/ledger-query';
 import { enqueue, processJob, reviewDraft, toggleWorkflow } from '@/server/jobs';
+import { archiveDraft, listArchivedDrafts } from '@/server/draft-archive';
 import { ask } from '@/server/assistant';
 import { saveWorkspace } from '@/server/workspace';
 export const runtime = 'nodejs';
@@ -38,10 +40,13 @@ export async function GET(request: Request, ctx: Context) {
           orderBy: { updatedAt: 'desc' },
           take: 20,
         });
+      case 'draft-archive':
+        return listArchivedDrafts(s, new URL(request.url).searchParams.get('after'));
       case 'jobs':
         return db().job.findMany({
           where: { companyId },
           orderBy: { availableAt: 'desc' },
+          select: { id: true, kind: true, status: true, attempts: true, error: true },
           take: 50,
         });
       case 'members':
@@ -87,22 +92,64 @@ export async function POST(request: Request, ctx: Context) {
       await db().conversation.deleteMany({ where: { companyId, userId: s.userId } });
       return { cleared: true };
     }
-    if (path[1] === 'workflow-toggle') return toggleWorkflow(s, p);
+    if (path[1] === 'workflow-toggle') return toggleWorkflow(s, p, key);
     if (path[1] === 'jobs') {
       const job = await enqueue(s, p);
       await processJob(job.id);
       return db().job.findUnique({ where: { id: job.id } });
     }
-    if (path[1] === 'draft-review') return reviewDraft(s, p);
+    if (path[1] === 'draft-archive') return archiveDraft(s, p, key);
+    if (path[1] === 'draft-review') return reviewDraft(s, p, key);
     if (path[1] === 'assistant') {
       await rateLimit(`${s.userId}:assistant`, 20);
-      return ask(s, p);
+      if (!request.headers.get('accept')?.includes('application/x-ndjson')) return ask(s, p);
+      const abort = new AbortController();
+      const signal = AbortSignal.any([request.signal, abort.signal]);
+      const encoder = new TextEncoder();
+      return new Response(
+        new ReadableStream({
+          async start(controller) {
+            const send = (event: unknown) => {
+              if (!signal.aborted) controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'));
+            };
+            try {
+              const result = await ask(s, p, (text) => send({ type: 'delta', text }), signal);
+              send({ type: 'done', result });
+            } catch (error) {
+              send({
+                type: 'error',
+                error:
+                  error instanceof ApiError
+                    ? error.message
+                    : 'The answer could not be saved. Please retry.',
+              });
+            } finally {
+              if (!signal.aborted) controller.close();
+            }
+          },
+          cancel() {
+            abort.abort();
+          },
+        }),
+        {
+          headers: {
+            'Content-Type': 'application/x-ndjson',
+            'Cache-Control': 'private, no-store',
+            'X-Accel-Buffering': 'no',
+          },
+        },
+      );
     }
     if (path[1] === 'command') {
       const input = z.object({ action: text, payload: z.unknown() }).parse(p);
-      return mutation(s, key, input.action, input.payload, (tx) =>
+      const result = await mutation(s, key, input.action, input.payload, (tx) =>
         command(tx, s, input.action, input.payload),
       );
+      try {
+        return { result, patch: await mutationPatch(s, input.action, result) };
+      } catch {
+        return { result, refreshRequired: true };
+      }
     }
     if (path[1] === 'workspace')
       return mutation(s, key, 'workspace', p, (tx) => saveWorkspace(tx, s, p));

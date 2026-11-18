@@ -150,15 +150,38 @@ export function BusinessProvider({
   };
   const execute = async (action: string, payload: unknown, key?: string) => {
     if (!live) throw new Error('Live backend is not connected.');
-    const result = await api(`${live.company.id}/command`, { action, payload }, key);
-    try {
-      await refresh();
-    } catch {
+    const response = await api<{
+      result: unknown;
+      patch?: { data: Partial<BusinessData>; audit: AuditEntry[] };
+      refreshRequired?: boolean;
+    }>(`${live.company.id}/command`, { action, payload }, key);
+    if (response.patch) {
+      const patch = response.patch;
+      setData((previous) => {
+        const next = { ...previous };
+        for (const collection of ['customers', 'products', 'orders', 'invoices'] as Collection[]) {
+          const incoming = patch.data[collection] ?? [];
+          const updates = new Map(incoming.map((row) => [row.id, row]));
+          const merged = previous[collection].map((row) => {
+            const replacement = updates.get(row.id);
+            updates.delete(row.id);
+            return replacement && (replacement.version ?? 0) >= (row.version ?? 0)
+              ? replacement
+              : row;
+          });
+          Object.assign(next, { [collection]: [...updates.values(), ...merged] });
+        }
+        if (patch.data.dailySales) next.dailySales = patch.data.dailySales;
+        return next;
+      });
+      setAudit(patch.audit);
+      setStorageError('');
+    } else {
       setStorageError(
-        'Saved successfully, but the updated ledger could not be loaded. Refresh before making another change.',
+        'Saved successfully, but updated records could not be loaded. Refresh before making another change.',
       );
     }
-    return result;
+    return response.result;
   };
   const save = (key: Collection, record: BusinessRecord, message: string) => {
     if (live) throw new Error('Use the live transaction form to save this record.');

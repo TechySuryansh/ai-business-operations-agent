@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import { db } from '@/server/db';
+import { enqueueRecurringWorkflows } from '@/server/recurring-workflows';
 import { processJob } from '@/server/jobs';
 import { respond } from '@/server/http';
 import { ApiError } from '@/server/rules';
@@ -13,6 +14,7 @@ export async function POST(request: Request) {
       actual = Buffer.from(auth);
     if (expected.length !== actual.length || !timingSafeEqual(expected, actual))
       throw new ApiError(401, 'Unauthorized.');
+    const queued = await enqueueRecurringWorkflows();
     const pending = await db().job.findMany({
       where: { status: 'pending', availableAt: { lte: new Date() } },
       orderBy: { availableAt: 'asc' },
@@ -28,6 +30,6 @@ export async function POST(request: Request) {
       }
     }
     await db().rateLimit.deleteMany({ where: { expiresAt: { lt: new Date() } } });
-    return { results };
+    return { queued, results };
   });
 }

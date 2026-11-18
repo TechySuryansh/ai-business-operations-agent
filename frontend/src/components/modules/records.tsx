@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Download, ArrowUpRight, Plus, Pencil, Save, ArrowUpDown } from 'lucide-react';
+import { api } from '@/lib/backend-client';
 import { LiveRecordEditor } from './live-record-editor';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -16,6 +17,7 @@ import {
 import type { Module, Customer, Product, Order, Invoice } from '@/types/business';
 export type RecordKind = 'Customers' | 'Sales' | 'Inventory' | 'Finance';
 export interface RecordSelection {
+  record?: BusinessRecord;
   kind: RecordKind;
   id: string;
 }
@@ -165,8 +167,72 @@ export function Records({
   const source: Row[] = data[collection[kind]];
   const [view, setView] = useState<View>(defaultView);
   const [page, setPage] = useState(1);
+  const [remote, setRemote] = useState<{ rows: Row[]; total: number; allTotal: number } | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!live) return;
+    let active = true;
+    const controller = new AbortController();
+    setLoading(true);
+    setLoadError('');
+    setRemote(null);
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams({
+        type: collection[kind],
+        q: view.q,
+        status: view.status,
+        sort: view.sort,
+        direction: view.direction,
+        page: String(page),
+        size: String(view.size),
+      });
+      api<{ rows: Row[]; total: number; allTotal: number }>(
+        `${live.company.id}/records?${params}`,
+        undefined,
+        undefined,
+        { signal: controller.signal },
+      )
+        .then((result) => {
+          if (!active) return;
+          const last = Math.max(1, Math.ceil(result.total / view.size));
+          if (page > last) {
+            setPage(last);
+            return;
+          }
+          setRemote(result);
+        })
+        .catch((error) => {
+          if (active) setLoadError(error.message);
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 200);
+    return () => {
+      active = false;
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [
+    live?.company.id,
+    kind,
+    view.q,
+    view.status,
+    view.sort,
+    view.direction,
+    view.size,
+    page,
+    data,
+    retry,
+  ]);
   const [selected, setSelected] = useState<string[]>([]);
   const [editor, setEditor] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [saved, setSaved] = useState<{ name: string; view: View }[]>([]);
   const [viewName, setViewName] = useState('');
   useEffect(() => {
@@ -251,9 +317,12 @@ export function Records({
       window.history.replaceState(null, '', `#${slug}?${p}`);
     }
   };
-  const totalPages = Math.max(1, Math.ceil(rows.length / view.size));
+  const matchingCount = live ? (remote?.total ?? 0) : rows.length;
+  const totalPages = Math.max(1, Math.ceil(matchingCount / view.size));
   const currentPage = Math.min(page, totalPages);
-  const visibleRows = rows.slice((currentPage - 1) * view.size, currentPage * view.size);
+  const visibleRows = live
+    ? (remote?.rows ?? [])
+    : rows.slice((currentPage - 1) * view.size, currentPage * view.size);
   const shownColumns = columns[kind].filter((c, i) => i === 0 || !view.hidden.includes(c.key));
   const summaries =
     kind === 'Customers'
@@ -338,13 +407,37 @@ export function Records({
       'Fully paid invoices',
     ],
   };
-  const exportRows = () => {
+  const exportRows = async () => {
+    setExporting(true);
+    setExportError('');
     try {
-      const exportable = selected.length ? rows.filter((r) => selected.includes(r.id)) : rows;
+      let exportable = rows;
+      if (live) {
+        exportable = [];
+        for (let page = 1; ; page++) {
+          const params = new URLSearchParams({
+            type: collection[kind],
+            q: view.q,
+            status: view.status,
+            sort: view.sort,
+            direction: view.direction,
+            page: String(page),
+            size: '100',
+          });
+          const result = await api<{ rows: Row[]; total: number }>(
+            `${live.company.id}/records?${params}`,
+          );
+          exportable.push(...result.rows);
+          if (!result.rows.length || exportable.length >= result.total) break;
+        }
+      }
+      if (selected.length) exportable = exportable.filter((row) => selected.includes(row.id));
       downloadCSV(`${exportName(companyName)}-${kind.toLowerCase()}`, exportable);
       notify(`${exportable.length} records exported as CSV.`);
-    } catch {
-      notify('Export failed. Please try again.');
+    } catch (error) {
+      setExportError((error as Error).message);
+    } finally {
+      setExporting(false);
     }
   };
   const persistViews = (next: typeof saved) => {
@@ -387,7 +480,11 @@ export function Records({
               onChange={(q) => change({ q })}
               placeholder={`Search ${kind.toLowerCase()}...`}
             />
-            <Button variant="outline" onClick={exportRows} disabled={!rows.length}>
+            <Button
+              variant="outline"
+              onClick={exportRows}
+              disabled={exporting || loading || !matchingCount}
+            >
               <Download size={15} />
               {selected.length ? `Export ${selected.length} selected` : 'Export'}
             </Button>
@@ -576,7 +673,7 @@ export function Records({
                         <>
                           <button
                             className="record-link"
-                            onClick={() => onSelect({ kind, id: row.id })}
+                            onClick={() => onSelect({ kind, id: row.id, record: row })}
                           >
                             {formatted(row, c.key)}
                           </button>
@@ -597,7 +694,7 @@ export function Records({
                     <button
                       className="icon-button"
                       aria-label={`View ${row.id}`}
-                      onClick={() => onSelect({ kind, id: row.id })}
+                      onClick={() => onSelect({ kind, id: row.id, record: row })}
                     >
                       <ArrowUpRight size={15} />
                     </button>
@@ -607,13 +704,28 @@ export function Records({
             </tbody>
           </table>
         </div>
-        {!rows.length && <Empty />}
+        {exportError && (
+          <p role="alert">
+            {exportError}{' '}
+            <Button disabled={exporting} onClick={exportRows}>
+              Retry CSV export
+            </Button>
+          </p>
+        )}
+        {loading && <p role="status">Loading records…</p>}
+        {loadError && (
+          <p role="alert">
+            {loadError} <Button onClick={() => setRetry((n) => n + 1)}>Retry</Button>
+          </p>
+        )}
+        {!loading && !loadError && !visibleRows.length && <Empty />}
         <div className="table-footer">
           <span role="status">
-            {rows.length
-              ? `${(currentPage - 1) * view.size + 1}–${Math.min(currentPage * view.size, rows.length)}`
+            {matchingCount
+              ? `${(currentPage - 1) * view.size + 1}–${Math.min(currentPage * view.size, matchingCount)}`
               : '0'}{' '}
-            of {rows.length} matching records ({source.length} total)
+            of {matchingCount} matching records ({live ? (remote?.allTotal ?? 0) : source.length}{' '}
+            total)
             {selected.length > 0 ? ` · ${selected.length} selected` : ''}
           </span>
           <div className="pagination">
@@ -632,7 +744,7 @@ export function Records({
             <Button
               size="sm"
               variant="outline"
-              disabled={currentPage === 1}
+              disabled={loading || currentPage === 1}
               onClick={() => goPage(currentPage - 1)}
             >
               Previous
@@ -643,7 +755,7 @@ export function Records({
             <Button
               size="sm"
               variant="outline"
-              disabled={currentPage === totalPages}
+              disabled={loading || currentPage === totalPages}
               onClick={() => goPage(currentPage + 1)}
             >
               Next
@@ -899,9 +1011,8 @@ export function RecordDetails({
   const [editing, setEditing] = useState(false);
   const [payment, setPayment] = useState(false);
   const [feedback, setFeedback] = useState('');
-  const record: Row | undefined = data[collection[selection.kind]].find(
-    (r) => r.id === selection.id,
-  );
+  const record: Row | undefined =
+    data[collection[selection.kind]].find((r) => r.id === selection.id) ?? selection.record;
   if (!record) return <Empty />;
   if (editing)
     return (

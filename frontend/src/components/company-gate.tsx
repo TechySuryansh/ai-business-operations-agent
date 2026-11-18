@@ -12,17 +12,23 @@ export function CompanyGate() {
   const [bootstrap, setBootstrap] = useState<LiveBootstrap | null>(null);
   const [error, setError] = useState('');
   const [name, setName] = useState('');
+  const [companyToRetry, setCompanyToRetry] = useState<string>();
   const [busy, setBusy] = useState(false);
   const load = async () => {
+    setBusy(true);
+    setError('');
     try {
       const rows = await api<{ company: { id: string; name: string } }[]>('companies');
       setCompanies(rows);
       if (rows.length === 1) await choose(rows[0].company.id);
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setBusy(false);
     }
   };
   const choose = async (id: string) => {
+    setCompanyToRetry(id);
     setBusy(true);
     setError('');
     try {
@@ -46,14 +52,20 @@ export function CompanyGate() {
       <section className="panel auth-panel">
         <h1>Your workspace</h1>
         {error && <p role="alert">{error}</p>}
+        {error && companyToRetry && (
+          <Button disabled={busy} onClick={() => choose(companyToRetry)}>
+            Retry opening workspace
+          </Button>
+        )}
         {companies === null ? (
           <Button
+            disabled={busy}
             onClick={() => {
               setError('');
               void load();
             }}
           >
-            Load companies
+            {busy ? 'Loading…' : error ? 'Retry loading companies' : 'Load companies'}
           </Button>
         ) : companies.length ? (
           companies.map(({ company }) => (
@@ -67,6 +79,7 @@ export function CompanyGate() {
             onSubmit={async (e) => {
               e.preventDefault();
               setBusy(true);
+              setError('');
               try {
                 const company = await api<{ id: string }>('companies', { name });
                 await choose(company.id);
@@ -87,7 +100,9 @@ export function CompanyGate() {
                 maxLength={200}
               />
             </label>
-            <Button disabled={busy}>Create company</Button>
+            <Button disabled={busy || !!companyToRetry}>
+              {error ? 'Retry creating company' : 'Create company'}
+            </Button>
           </form>
         )}
         <Button

@@ -3409,3 +3409,6 @@ th[aria-sort='descending'] .sort-button svg {
 .live-status { display:flex; align-items:center; gap:12px; padding:8px 24px; border-bottom:1px solid #e5e7eb; font-size:12px; background:#f7f8fa; }
 .live-status button { margin-left:auto; }
 .line-item { display:grid; grid-template-columns:minmax(0, 1fr) 80px auto; gap:8px; align-items:end; }
+
+.auth-divider { display:flex; align-items:center; gap:12px; color:var(--muted, #667085); font-size:12px; }
+.auth-divider::before, .auth-divider::after { content:''; flex:1; height:1px; background:var(--border, #dce0e6); }

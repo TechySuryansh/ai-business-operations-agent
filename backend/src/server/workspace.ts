@@ -33,6 +33,7 @@ export const workspaceInput = z.object({
         lastRun: text,
         runs: z.number().int().nonnegative(),
         enabled: z.boolean(),
+        schedule: z.enum(['off', 'daily', 'weekly']).optional(),
       }),
     )
     .max(20),
@@ -71,11 +72,27 @@ export async function saveWorkspace(tx: Tx, s: Scope, input: unknown) {
   }
   // Generic settings saves cannot rewrite immutable draft decisions or execution history.
   const previous = old?.data as
-    { drafts?: unknown[]; workflows?: { id: string; runs: number; lastRun: string }[] } | undefined;
+    | {
+        drafts?: unknown[];
+        workflows?: {
+          id: string;
+          runs: number;
+          lastRun: string;
+          enabled: boolean;
+          schedule?: 'off' | 'daily' | 'weekly';
+        }[];
+      }
+    | undefined;
   p.data.drafts = (previous?.drafts ?? []) as typeof p.data.drafts;
   p.data.workflows = p.data.workflows.map((w) => {
     const existing = previous?.workflows?.find((a) => a.id === w.id);
-    return { ...w, runs: existing?.runs ?? 0, lastRun: existing?.lastRun ?? 'Never' };
+    return {
+      ...w,
+      enabled: existing?.enabled ?? w.enabled,
+      schedule: existing?.schedule ?? 'off',
+      runs: existing?.runs ?? 0,
+      lastRun: existing?.lastRun ?? 'Never',
+    };
   });
   const result = await tx.workspaceState.upsert({
     where: { companyId: s.companyId },

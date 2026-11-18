@@ -44,7 +44,9 @@ export async function rateLimit(key: string, limit = 120) {
 }
 export async function respond(fn: () => Promise<unknown>) {
   try {
-    return Response.json(await fn(), { headers: { 'Cache-Control': 'private, no-store' } });
+    const result = await fn();
+    if (result instanceof Response) return result;
+    return Response.json(result, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (e) {
     const requestId = crypto.randomUUID();
     let status = 500,

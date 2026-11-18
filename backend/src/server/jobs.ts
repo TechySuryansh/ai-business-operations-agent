@@ -3,8 +3,9 @@ import { z } from 'zod';
 import { Prisma } from '@/generated/prisma/client';
 import type { Scope } from './auth';
 import { db } from './db';
-import { atomic, audit } from './transaction';
+import { atomic, audit, mutation, type Tx } from './transaction';
 import { ApiError, authorize, id, text, today } from './rules';
+import { recurringJobPrefix } from './recurring-workflows';
 import { automations } from './workflows';
 export async function enqueue(s: Scope, input: unknown) {
   authorize(s.role, 'operate');
@@ -46,9 +47,18 @@ export async function processJob(jobId: string) {
           runs: number;
           lastRun: string;
           enabled: boolean;
+          schedule?: 'off' | 'daily' | 'weekly';
         }[];
       };
+      const recurring = job.key.startsWith(recurringJobPrefix);
+      const skip = (reason: string) =>
+        tx.job.update({
+          where: { id: job.id },
+          data: { status: 'skipped', error: reason, attempts: { increment: 1 } },
+        });
       const workflow = state.workflows.find((a) => a.category === job.kind);
+      if (recurring && (!workflow?.enabled || !workflow.schedule || workflow.schedule === 'off'))
+        return skip('Recurring workflow paused or disabled.');
       if (!workflow || !workflow.enabled) throw new ApiError(409, 'This workflow is paused.');
       let lines: string[] = [];
       if (job.kind === 'Inventory') {
@@ -91,6 +101,7 @@ export async function processJob(jobId: string) {
           (c) => `Prepare an account follow-up for ${c.name} (${c.email}). Record ${c.id}`,
         );
       }
+      if (recurring && !lines.length) return skip('No matching records require review.');
       const now = new Date().toISOString();
       const draft = {
         id: job.id,
@@ -135,7 +146,7 @@ export async function processJob(jobId: string) {
     throw e;
   }
 }
-export async function reviewDraft(s: Scope, input: unknown) {
+export async function reviewDraft(s: Scope, input: unknown, key?: string) {
   authorize(s.role, 'operate');
   const p = z
     .object({
@@ -146,7 +157,7 @@ export async function reviewDraft(s: Scope, input: unknown) {
       reason: z.string().max(2000).optional(),
     })
     .parse(input);
-  return atomic(async (tx) => {
+  const save = async (tx: Tx) => {
     const old = await tx.workspaceState.findUnique({ where: { companyId: s.companyId } });
     if (!old || old.version !== p.version)
       throw new ApiError(409, 'Draft history changed. Reload it before reviewing.');
@@ -185,19 +196,21 @@ export async function reviewDraft(s: Scope, input: unknown) {
       where: { companyId: s.companyId },
       data: { data: state as unknown as Prisma.InputJsonValue, version: { increment: 1 } },
     });
-  });
+  };
+  return key ? mutation(s, key, 'draft-review', p, save) : atomic(save);
 }
 
-export async function toggleWorkflow(s: Scope, input: unknown) {
+export async function toggleWorkflow(s: Scope, input: unknown, key?: string) {
   authorize(s.role, 'operate');
   const p = z
     .object({
       kind: z.enum(['Inventory', 'Finance', 'Sales']),
       enabled: z.boolean(),
+      schedule: z.enum(['off', 'daily', 'weekly']).optional(),
       version: z.number().int().nonnegative(),
     })
     .parse(input);
-  return atomic(async (tx) => {
+  const save = async (tx: Tx) => {
     const company = await tx.company.findUniqueOrThrow({ where: { id: s.companyId } });
     const old = await tx.workspaceState.findUnique({ where: { companyId: s.companyId } });
     if ((old?.version ?? 0) !== p.version)
@@ -213,15 +226,25 @@ export async function toggleWorkflow(s: Scope, input: unknown) {
       snoozed: {},
       drafts: [],
       workflows: automations.map((a) => ({ ...a, runs: 0, lastRun: 'Never' })),
-    }) as unknown as { workflows: { category: string; enabled: boolean }[] };
+    }) as unknown as {
+      workflows: { category: string; enabled: boolean; schedule?: 'off' | 'daily' | 'weekly' }[];
+    };
     const workflow = state.workflows.find((w) => w.category === p.kind);
     if (!workflow) throw new ApiError(404, 'Workflow not found.');
     workflow.enabled = p.enabled;
-    await audit(tx, s, `${p.kind} workflow ${p.enabled ? 'enabled' : 'paused'}`);
+    if (p.schedule !== undefined) workflow.schedule = p.schedule;
+    await audit(
+      tx,
+      s,
+      p.schedule === undefined
+        ? `${p.kind} workflow ${p.enabled ? 'enabled' : 'paused'}`
+        : `${p.kind} recurring schedule set to ${p.schedule}`,
+    );
     return tx.workspaceState.upsert({
       where: { companyId: s.companyId },
       create: { companyId: s.companyId, data: state as unknown as Prisma.InputJsonValue },
       update: { data: state as unknown as Prisma.InputJsonValue, version: { increment: 1 } },
     });
-  });
+  };
+  return key ? mutation(s, key, 'workflow-toggle', p, save) : atomic(save);
 }

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, ArrowUpRight, Check, Copy, Database, Plus, ShieldCheck } from 'lucide-react';
-import { api } from '@/lib/backend-client';
+import { api, streamAssistant } from '@/lib/backend-client';
 import { useBusiness } from '@/lib/business-context';
 import { suggestedPrompts } from '@/data/mock-data';
 import { answer } from '@/lib/demo-assistant';
@@ -46,6 +46,14 @@ export function Assistant({
   const [conversationId, setConversationId] = useState<string>();
   const pendingRequest = useRef<{ prompt: string; id: string } | null>(null);
   const [sending, setSending] = useState(false);
+  const [partial, setPartial] = useState('');
+  const request = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      request.current?.abort();
+    },
+    [],
+  );
   const [archive, setArchive] = useState<{ id: string; title: string; messages: Message[] }[]>([]);
   const [storageError, setStorageError] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -53,19 +61,32 @@ export function Assistant({
   const [ready, setReady] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState('');
+  const [historyError, setHistoryError] = useState('');
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  async function loadHistory() {
+    if (!live) return;
+    setLoadingHistory(true);
+    setHistoryError('');
+    try {
+      const rows = await api<{ id: string; messages: Message[] }[]>(
+        `${live.company.id}/conversations`,
+      );
+      setArchive(
+        rows.map((c) => ({
+          ...c,
+          title: c.messages.find((m) => m.role === 'user')?.text.slice(0, 70) ?? 'Conversation',
+        })),
+      );
+    } catch (error) {
+      setHistoryError((error as Error).message);
+    } finally {
+      setLoadingHistory(false);
+      setReady(true);
+    }
+  }
   useEffect(() => {
     if (live) {
-      api<{ id: string; messages: Message[] }[]>(`${live.company.id}/conversations`)
-        .then((rows) => {
-          setArchive(
-            rows.map((c) => ({
-              ...c,
-              title: c.messages.find((m) => m.role === 'user')?.text.slice(0, 70) ?? 'Conversation',
-            })),
-          );
-          setReady(true);
-        })
-        .catch((e) => setStorageError(e.message));
+      void loadHistory();
       return;
     }
     try {
@@ -128,24 +149,35 @@ export function Assistant({
     }
   }, [messages, archive, ready]);
   const send = async (text: string) => {
-    if (!text.trim() || !ready || sending) return;
+    if (!text.trim() || !ready || sending || request.current) return;
     if (live) {
       setSending(true);
+      setPartial('');
+      const controller = new AbortController();
+      request.current = controller;
       setStorageError('');
       try {
         if (pendingRequest.current?.prompt !== text)
           pendingRequest.current = { prompt: text, id: crypto.randomUUID() };
-        const result = await api<{ id: string; messages: Message[] }>(
+        const result = await streamAssistant<{ id: string; messages: Message[] }>(
           `${live.company.id}/assistant`,
           { prompt: text, days, conversationId, requestId: pendingRequest.current.id },
+          (delta) => setPartial((old) => old + delta),
+          controller.signal,
         );
         setConversationId(result.id);
         setMessages(result.messages);
         setInput('');
         pendingRequest.current = null;
       } catch (e) {
-        setStorageError((e as Error).message);
+        setStorageError(
+          (e as Error).name === 'TimeoutError'
+            ? 'The answer timed out. Please retry.'
+            : (e as Error).message,
+        );
       } finally {
+        request.current = null;
+        setPartial('');
         setSending(false);
       }
       return;
@@ -167,6 +199,8 @@ export function Assistant({
     if (messages.length) bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages]);
   const newChat = () => {
+    if (request.current) return;
+    pendingRequest.current = null;
     setConversationId(undefined);
     if (messages.length)
       setArchive((prev) =>
@@ -191,11 +225,19 @@ export function Assistant({
           {companyName} ·{' '}
           {live ? `Last ${days} days through ${live.businessDate}` : `Nov ${15 - days}–14, 2026`}
         </span>
-        <Button variant="outline" size="sm" onClick={newChat}>
+        <Button variant="outline" size="sm" disabled={sending} onClick={newChat}>
           <Plus size={14} />
           New conversation
         </Button>
       </div>
+      {historyError && (
+        <p role="alert">
+          {historyError}{' '}
+          <Button disabled={loadingHistory || sending} onClick={loadHistory}>
+            Retry loading conversations
+          </Button>
+        </p>
+      )}
       {storageError && (
         <p className="form-error" role="alert">
           {storageError}
@@ -207,11 +249,13 @@ export function Assistant({
             Saved conversations{' '}
             <select
               aria-label="Open saved conversation"
+              disabled={sending}
               value=""
               onChange={(e) => {
                 const found = archive.find((c) => c.id === e.target.value);
                 if (found) {
                   if (live) {
+                    pendingRequest.current = null;
                     setMessages(found.messages);
                     setConversationId(found.id);
                     return;
@@ -239,6 +283,7 @@ export function Assistant({
           <Button
             variant="ghost"
             size="sm"
+            disabled={sending}
             onClick={() => {
               if (live) {
                 api(`${live.company.id}/conversations-clear`, {})
@@ -292,8 +337,9 @@ export function Assistant({
             ))}
           </div>
           <p className="context-note">
-            Uses local sample records. Historical sales aggregates are separate from the order
-            ledger.
+            {live
+              ? 'Uses authorized company summaries. Some record lists are limited to 20 entries.'
+              : 'Uses local sample records. Historical sales aggregates are separate from the order ledger.'}
           </p>
         </aside>
         <div className="analysis-main">
@@ -326,7 +372,13 @@ export function Assistant({
                   <div className="message-body">
                     <div className="message-label">
                       {message.role === 'assistant' ? 'Analysis' : 'Question'}
-                      <span>{message.role === 'assistant' ? 'Demo analysis' : ''}</span>
+                      <span>
+                        {message.role === 'assistant'
+                          ? live
+                            ? 'Business assistant'
+                            : 'Demo analysis'
+                          : ''}
+                      </span>
                     </div>
                     <div className="answer-content">
                       {message.text.split('\n\n').map((paragraph, i) => (
@@ -416,6 +468,11 @@ export function Assistant({
               <div ref={bottom} />
             </div>
           )}
+          {sending && (
+            <div role="status" aria-live="polite" className="message-body">
+              <p>{partial || 'Preparing your answer…'}</p>
+            </div>
+          )}
           <div className="assistant-composer">
             <form
               onSubmit={(e) => {
@@ -435,7 +492,7 @@ export function Assistant({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask a question about your business records…"
-                disabled={!ready}
+                disabled={!ready || sending}
               />
               <button
                 type="submit"
@@ -447,7 +504,9 @@ export function Assistant({
             </form>
             <p>
               <ShieldCheck size={12} />
-              Frontend demo · Responses use predefined logic and fictional data. No AI is connected.
+              {live
+                ? 'Company context is shared with the configured AI provider. Review answers before acting. The assistant cannot change records.'
+                : 'Frontend demo · Responses use predefined logic and fictional data. No AI is connected.'}
             </p>
           </div>
         </div>

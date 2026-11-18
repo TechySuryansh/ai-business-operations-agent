@@ -89,3 +89,5 @@ The frontend redesign browser QA checked all 11 demo modules at 1440, 1024, 768,
 The ExcelJS UUID dependency is overridden to a compatible patched v11 version. ExcelJS only uses its v4 export; the workbook round-trip test verifies report compatibility.
 
 Backend verification: `npm run test:backend` runs isolated real PostgreSQL checks. `npm test` includes backend rules and mocked live-form integration checks. Real Supabase authentication requires a configured project and separate end-to-end verification.
+
+OpenAI assistant configuration and verification: [OPENAI_SETUP.md](./OPENAI_SETUP.md).

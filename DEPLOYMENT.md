@@ -72,7 +72,7 @@ The default local ports remain 3001 and 3000. Both services must be deployed fro
 
 ## 5. Scheduling and monitoring
 
-On paid hosting, a managed cron job can run `node backend/scripts/run-jobs.mjs` every minute. The free service runs the same command while awake. It calls the backend job endpoint using the generated bearer secret, refuses redirects and exits unsuccessfully for HTTP failures or failed/retrying jobs. This processes queued drafts; it does not create recurring business workflows or send emails.
+On paid hosting, a managed cron job can run `node backend/scripts/run-jobs.mjs` every minute. The free service runs the same command while awake. It calls the backend job endpoint using the generated bearer secret, refuses redirects and exits unsuccessfully for HTTP failures or failed/retrying jobs. The runner also queues daily and weekly review drafts configured in Automations. Daily runs become eligible at 9:00 AM company time, and weekly runs become eligible at 9:00 AM on Mondays. Email delivery requires a separate integration.
 
 For a local/manual scheduler check:
 

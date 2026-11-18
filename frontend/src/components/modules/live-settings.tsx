@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useBusiness } from '@/lib/business-context';
 import { api } from '@/lib/backend-client';
 import { supabaseBrowser } from '@/lib/supabase/browser';
@@ -18,6 +18,8 @@ export function LiveSettings({
   const [form, setForm] = useState(preferences);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('staff');
+  const [membershipError, setMembershipError] = useState('');
+  const membershipRequest = useRef<{ payload: string; key: string } | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   return (
     <div className="module-stack">
@@ -64,13 +66,24 @@ export function LiveSettings({
             className="record-form"
             onSubmit={async (e) => {
               e.preventDefault();
+              if (busy) return;
               setBusy(true);
+              setMembershipError('');
+              const payload = JSON.stringify({ email, role });
+              if (membershipRequest.current?.payload !== payload) {
+                membershipRequest.current = { payload, key: crypto.randomUUID() };
+              }
               try {
-                await api(`${live.company.id}/members`, { email, role });
+                await api(
+                  `${live.company.id}/members`,
+                  { email, role },
+                  membershipRequest.current.key,
+                );
+                membershipRequest.current = undefined;
                 notify('Company membership saved.');
                 setEmail('');
               } catch (e) {
-                notify((e as Error).message);
+                setMembershipError((e as Error).message);
               } finally {
                 setBusy(false);
               }
@@ -81,18 +94,22 @@ export function LiveSettings({
               <input
                 type="email"
                 required
+                disabled={busy}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </label>
             <label className="field-label">
               Role
-              <select value={role} onChange={(e) => setRole(e.target.value)}>
+              <select disabled={busy} value={role} onChange={(e) => setRole(e.target.value)}>
                 <option value="staff">Staff · read company data and manage customers</option>
                 <option value="manager">Manager · manage records and financial operations</option>
               </select>
             </label>
-            <Button disabled={busy}>Save membership</Button>
+            {membershipError && <p role="alert">{membershipError}</p>}
+            <Button disabled={busy}>
+              {busy ? 'Saving…' : membershipError ? 'Retry membership save' : 'Save membership'}
+            </Button>
           </form>
         </section>
       )}

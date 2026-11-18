@@ -299,7 +299,7 @@ export function LiveRecordEditor({
           Cancel
         </Button>
         <Button disabled={busy || (live?.role === 'staff' && kind !== 'Customers')}>
-          {busy ? 'Saving…' : 'Save changes'}
+          {busy ? 'Saving…' : error ? 'Retry save' : 'Save changes'}
         </Button>
       </div>
     </form>
