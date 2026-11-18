@@ -1,0 +1,33 @@
+name: Production health
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Check Vercel frontend and Render API
+        shell: bash
+        env:
+          FRONTEND_URL: https://nexus-erp-frontend-nine.vercel.app
+        run: |
+          failed=0
+          check() {
+            local path="$1" expected="$2" body
+            if body=$(curl --fail --silent --show-error --connect-timeout 10 --max-time 45 --retry 1 --retry-delay 3 "$FRONTEND_URL$path") &&
+                jq -e --arg expected "$expected" '.status == $expected' >/dev/null <<<"$body"; then
+              echo "$path returned $expected"
+            else
+              echo "::error title=Production health check failed::$path did not return $expected"
+              failed=1
+            fi
+          }
+          check /health ok
+          check /api/health ready
+          exit "$failed"
